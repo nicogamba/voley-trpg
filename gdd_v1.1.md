@@ -1,5 +1,9 @@
 # ZONA 3 — GDD v1.2
 
+> ⚠️ **Documento histórico.** Describe el diseño v1.2 (movimiento posicional y
+> preview de resolución). La versión vigente es **`gdd_v1.3.md`** (“Duelo
+> oculto”). Las fórmulas actuales están en **`hoja_de_numeros.md`** (v1.3).
+
 **Vóley táctico por turnos · Prototipo web mobile-first**
 
 > Documento de diseño vivo. Reemplaza conceptualmente a `game_design_document.md`, que queda como referencia de la primera idea. Las fórmulas están alineadas con `hoja_de_numeros.md` v1.2 y se validan con simulación.

@@ -3,9 +3,9 @@ import type {
   BallPressure,
   ClassId,
   Col,
+  DefenseScheme,
   Row,
   Stats,
-  Tempo,
 } from './types'
 
 export const CLASS_STATS: Record<ClassId, Stats> = {
@@ -20,6 +20,13 @@ export const CLASS_NAMES: Record<ClassId, string> = {
   middle: 'Central',
   opposite: 'Opuesto',
   libero: 'Líbero',
+}
+
+export const CLASS_LETTERS: Record<ClassId, string> = {
+  setter: 'A',
+  middle: 'C',
+  opposite: 'O',
+  libero: 'L',
 }
 
 export const CLASS_ORDER: ClassId[] = [
@@ -37,8 +44,10 @@ export const FORMATION: Record<ClassId, { row: Row; col: Col }> = {
 }
 
 export const TARGET_SCORE = 7
-export const AP_PER_POSSESSION = 3
-export const REACTION_AP = 2
+/** Energía al empezar una posesión. */
+export const AP_PER_POSSESSION = 2
+/** Tope de energía; un pase perfecto devuelve 1. */
+export const AP_MAX = 3
 export const PERFECT_PASS_AP_REFUND = 1
 export const MAX_RALLY_ATTACKS = 20
 
@@ -49,34 +58,127 @@ export const PRESSURE_VALUE: Record<BallPressure, number> = {
   attack: 3,
 }
 
-export const ATTACK_BONUS: Record<AttackKind, number> = {
-  power: 1,
-  placement: 0,
-  quick: 2,
-  pipe: 1,
-  wipe: -1,
-  tip: -1,
+export const ATTACK_KINDS: AttackKind[] = [
+  'power',
+  'placement',
+  'quick',
+  'pipe',
+  'wipe',
+  'tip',
+]
+
+export const ATTACK_LABEL: Record<AttackKind, string> = {
+  power: 'Potencia',
+  placement: 'Colocación',
+  quick: 'Rápido',
+  pipe: 'Pipe',
+  wipe: 'Wipe',
+  tip: 'Finta',
 }
 
-export const ATTACK_AP_COST: Record<AttackKind, number> = {
-  power: 1,
+export const ATTACK_SHORT: Record<AttackKind, string> = {
+  power: 'Fuerza bruta',
+  placement: 'Busca el hueco',
+  quick: 'Central, por el centro',
+  pipe: 'Opuesto desde atrás',
+  wipe: 'Usa tus manos',
+  tip: 'Toque suave al fondo',
+}
+
+export const ATTACK_BONUS: Record<AttackKind, number> = {
+  power: 2,
   placement: 0,
-  quick: 0,
-  pipe: 0,
-  wipe: 1,
+  quick: 2,
+  pipe: 2,
+  wipe: 2,
   tip: 0,
 }
 
-export const TEMPO_AP_COST: Record<Tempo, number> = {
-  high: 0,
-  quick: 1,
-  back: 1,
+export const ATTACK_AP_COST: Record<AttackKind, number> = {
+  power: 2,
+  placement: 0,
+  quick: 0,
+  pipe: 3,
+  wipe: 2,
+  tip: 0,
 }
 
-export const TEMPO_ATTACKS: Record<Tempo, AttackKind[]> = {
-  high: ['power', 'placement', 'wipe', 'tip'],
-  quick: ['quick'],
-  back: ['pipe'],
+export const DEFENSE_SCHEMES: DefenseScheme[] = [
+  'wall',
+  'spread',
+  'deep',
+  'libero',
+]
+
+export const SCHEME_LABEL: Record<DefenseScheme, string> = {
+  wall: 'Muro',
+  spread: 'Bloqueo abierto',
+  deep: 'Defensa profunda',
+  libero: 'Líbero atento',
+}
+
+export const SCHEME_SHORT: Record<DefenseScheme, string> = {
+  wall: 'Cierra la red',
+  spread: 'Cubre el ancho',
+  deep: 'Espera atrás',
+  libero: 'Lee las manos',
+}
+
+/** Stat que lidera cada esquema. */
+export const SCHEME_STAT: Record<DefenseScheme, keyof Stats> = {
+  wall: 'lectura',
+  spread: 'velocidad',
+  deep: 'lectura',
+  libero: 'tecnica',
+}
+
+export const SCHEME_BASE: Record<DefenseScheme, number> = {
+  wall: 3,
+  spread: 3,
+  deep: 3,
+  libero: 3,
+}
+
+/**
+ * Matchup oculto: cuánto suma cada esquema contra cada ataque.
+ * Positivo = el esquema frena ese ataque. Negativo = ese ataque lo castiga.
+ */
+export const SCHEME_EDGE: Record<
+  DefenseScheme,
+  Record<AttackKind, number>
+> = {
+  wall: {
+    power: 2,
+    placement: 0,
+    quick: 2,
+    pipe: -2,
+    wipe: -2,
+    tip: -2,
+  },
+  spread: {
+    power: -2,
+    placement: 2,
+    quick: -2,
+    pipe: 0,
+    wipe: 2,
+    tip: 2,
+  },
+  deep: {
+    power: 2,
+    placement: -2,
+    quick: 0,
+    pipe: 2,
+    wipe: 2,
+    tip: -2,
+  },
+  libero: {
+    power: -2,
+    placement: 2,
+    quick: -2,
+    pipe: -2,
+    wipe: 0,
+    tip: 2,
+  },
 }
 
 /** Clases que nacen en la fila del fondo y no pueden atacar desde la red. */

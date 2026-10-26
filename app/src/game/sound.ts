@@ -10,6 +10,7 @@ type Sfx =
   | 'lose'
   | 'click'
   | 'move'
+  | 'reveal'
 
 let context: AudioContext | null = null
 let muted = false
@@ -151,6 +152,23 @@ export const playSfx = (name: Sfx) => {
       break
     case 'move':
       tone({ freq: 520, duration: 0.05, type: 'sine', gain: 0.025 })
+      break
+    case 'reveal':
+      tone({ freq: 196, duration: 0.08, type: 'square', gain: 0.035 })
+      tone({
+        freq: 294,
+        duration: 0.08,
+        type: 'square',
+        gain: 0.035,
+        delay: 0.08,
+      })
+      tone({
+        freq: 392,
+        duration: 0.14,
+        type: 'square',
+        gain: 0.04,
+        delay: 0.16,
+      })
       break
   }
 }

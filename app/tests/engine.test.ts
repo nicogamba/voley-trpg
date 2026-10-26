@@ -1,386 +1,483 @@
 import { describe, expect, it } from 'vitest'
-import { createPlayers } from '../src/engine/state'
 import {
-  cell,
-  cellsOfSide,
-  moveDistance,
-  reaches,
-  zoneOf,
-} from '../src/engine/geometry'
-import {
-  attackBase,
+  AP_MAX,
+  AP_PER_POSSESSION,
+  ATTACK_AP_COST,
+  CLASS_STATS,
+  DEFENSE_SCHEMES,
+  SCHEME_EDGE,
+  SCHEME_STAT,
+  attackKindsFor,
   attackValue,
-  blockValue,
-  blockersFor,
-  defenseValue,
-  evaluateAttack,
+  cell,
+  createMatch,
+  createPlayers,
   isAttackAllowed,
+  isSeam,
+  mulberry32,
   receptionQuality,
   receptionValue,
+  resolveDuel,
+  schemeDefender,
   setQuality,
-} from '../src/engine/resolve'
-import type { Player, Quality, Side } from '../src/engine/types'
+  tellsFor,
+  withHiddenChoice,
+} from '../src/engine'
+import type {
+  AttackKind,
+  DefenseScheme,
+  GameState,
+  Player,
+  Quality,
+  Side,
+} from '../src/engine'
 
 const roster = createPlayers()
 const of = (side: Side, classId: Player['classId']): Player =>
-  roster.find((p) => p.side === side && p.classId === classId)!
-const home = roster.filter((p) => p.side === 'home')
+  roster.find((player) => player.side === side && player.classId === classId)!
+
+const home = roster.filter((player) => player.side === 'home')
 const homeMiddle = of('home', 'middle')
 const homeSetter = of('home', 'setter')
 const homeLibero = of('home', 'libero')
 const homeOpposite = of('home', 'opposite')
+const awayPlayers = roster.filter((player) => player.side === 'away')
 
-const bestReception = (
-  ballCell: ReturnType<typeof cell>,
-  players: Player[],
-  side: Side,
-): { player: Player; value: number; quality: Quality } => {
-  const receivers = players.filter(
-    (p) => p.side === side && reaches(p.cell, ballCell),
-  )
-  const occupied = players.some(
-    (p) => p.side === ballCell.side && p.cell.row === ballCell.row && p.cell.col === ballCell.col,
-  )
-  const seam = !occupied && receivers.length >= 2
-  const scored = receivers.map((player) => {
-    const value = receptionValue(player, ballCell, 1, seam)
-    return { player, value, quality: receptionQuality(value) }
-  })
-  scored.sort((a, b) => b.value - a.value)
-  return scored[0]
+const synthetic = (
+  id: string,
+  classId: Player['classId'],
+  row: 0 | 1,
+  col: 0 | 1 | 2,
+): Player => ({
+  id,
+  side: 'away',
+  classId,
+  name: id,
+  stats: { tecnica: 3, potencia: 3, velocidad: 3, lectura: 3 },
+  cell: { side: 'away', row, col },
+})
+
+const defense: Player[] = [
+  synthetic('d0', 'middle', 0, 0),
+  synthetic('d1', 'setter', 0, 1),
+  synthetic('d2', 'libero', 1, 1),
+  synthetic('d3', 'opposite', 1, 2),
+]
+
+const attacker: Player = {
+  id: 'a0',
+  side: 'home',
+  classId: 'middle',
+  name: 'Atacante',
+  stats: { tecnica: 3, potencia: 3, velocidad: 3, lectura: 3 },
+  cell: { side: 'home', row: 0, col: 1 },
 }
 
-describe('geometría', () => {
-  it('alcanza la celda propia y las ortogonales, nunca la diagonal', () => {
-    const origin = cell('home', 1, 1)
-    expect(reaches(origin, cell('home', 1, 1))).toBe(true)
-    expect(reaches(origin, cell('home', 0, 1))).toBe(true)
-    expect(reaches(origin, cell('home', 1, 0))).toBe(true)
-    expect(reaches(origin, cell('home', 0, 0))).toBe(false)
-    expect(reaches(origin, cell('home', 0, 2))).toBe(false)
-    expect(reaches(origin, cell('away', 1, 1))).toBe(false)
+const target = cell('away', 0, 0)
+
+const duel = (
+  scheme: DefenseScheme,
+  kind: AttackKind,
+  setQ: Quality,
+  who: Player = attacker,
+) =>
+  resolveDuel({
+    attacker: who,
+    kind,
+    target,
+    setQuality: setQ,
+    defending: defense,
+    scheme,
   })
 
-  it('mapea las seis zonas oficiales', () => {
-    expect([zoneOf(0, 0), zoneOf(0, 1), zoneOf(0, 2)]).toEqual([4, 3, 2])
-    expect([zoneOf(1, 0), zoneOf(1, 1), zoneOf(1, 2)]).toEqual([5, 6, 1])
+describe('formación y stats', () => {
+  it('arma cuatro jugadores por lado con la formación espejada', () => {
+    expect(roster).toHaveLength(8)
+    expect(home).toHaveLength(4)
+    expect(homeMiddle.cell).toEqual({ side: 'home', row: 0, col: 0 })
+    expect(homeSetter.cell).toEqual({ side: 'home', row: 0, col: 1 })
+    expect(homeOpposite.cell).toEqual({ side: 'home', row: 1, col: 2 })
+    expect(homeLibero.cell).toEqual({ side: 'home', row: 1, col: 1 })
+    expect(of('away', 'middle').cell).toEqual({ side: 'away', row: 0, col: 2 })
+    expect(of('away', 'opposite').cell).toEqual({
+      side: 'away',
+      row: 1,
+      col: 0,
+    })
   })
 
-  it('mide el movimiento en pasos ortogonales', () => {
-    expect(moveDistance(cell('home', 0, 0), cell('home', 1, 2))).toBe(3)
-    expect(moveDistance(cell('home', 0, 0), cell('home', 0, 2))).toBe(2)
-  })
-
-  it('produce las seis celdas de un lado', () => {
-    expect(cellsOfSide('home')).toHaveLength(6)
+  it('mantiene los stats 1-5 por clase', () => {
+    expect(CLASS_STATS.setter).toEqual({
+      tecnica: 5,
+      potencia: 2,
+      velocidad: 3,
+      lectura: 4,
+    })
+    expect(CLASS_STATS.middle.lectura).toBe(5)
+    expect(CLASS_STATS.opposite.potencia).toBe(5)
+    expect(CLASS_STATS.libero.velocidad).toBe(5)
   })
 })
 
 describe('recepción', () => {
-  it('el líbero en su celda contra saque llega a pase perfecto', () => {
-    const value = receptionValue(homeLibero, homeLibero.cell, 1, false)
-    expect(value).toBe(6)
-    expect(receptionQuality(value)).toBe(3)
+  it('convierte valor en calidad 0-3', () => {
+    expect(receptionQuality(6)).toBe(3)
+    expect(receptionQuality(5)).toBe(2)
+    expect(receptionQuality(4)).toBe(2)
+    expect(receptionQuality(3)).toBe(1)
+    expect(receptionQuality(2)).toBe(1)
+    expect(receptionQuality(1)).toBe(0)
+    expect(receptionQuality(0)).toBe(0)
   })
 
-  it('el armador en celda adyacente pierde calidad', () => {
-    const value = receptionValue(homeSetter, cell('home', 0, 0), 1, false)
-    expect(value).toBe(3)
-    expect(receptionQuality(value)).toBe(1)
+  it('premia al líbero en su propia celda y castiga la costura', () => {
+    const ball = cell('home', 1, 1)
+    expect(receptionValue(homeLibero, ball, 1, false)).toBe(6)
+    expect(receptionValue(homeLibero, ball, 1, true)).toBe(5)
+    expect(
+      receptionValue(homeLibero, ball, 1, true, { ignoresSeam: true }),
+    ).toBe(6)
   })
 
-  it('la costura resta uno', () => {
-    const clean = receptionValue(homeSetter, homeSetter.cell, 1, false)
-    const seam = receptionValue(homeSetter, homeSetter.cell, 1, true)
-    expect(seam).toBe(clean - 1)
+  it('castiga la recepción fuera de celda salvo velocidad alta', () => {
+    const ball = cell('home', 0, 1)
+    expect(receptionValue(homeMiddle, ball, 0, false)).toBe(1)
+    expect(receptionValue(homeOpposite, ball, 0, false)).toBe(2)
   })
 
-  it('Velocidad >= 4 ignora la penalización por celda adyacente', () => {
-    const fast = receptionValue(homeOpposite, cell('home', 1, 1), 1, false)
-    expect(fast).toBe(1)
-    expect(homeOpposite.stats.velocidad).toBeGreaterThanOrEqual(4)
-  })
-
-  it('sin velocidad, recibir fuera de la celda resta uno', () => {
-    const slow = receptionValue(homeMiddle, cell('home', 1, 0), 1, false)
-    expect(slow).toBe(0)
-  })
-
-  it('reproduce la tabla de recepción base de la hoja de números', () => {
-    const expected: Record<number, Quality> = {
-      1: 2,
-      2: 1,
-      3: 2,
-      4: 1,
-      5: 2,
-      6: 3,
-    }
-    for (const target of cellsOfSide('home')) {
-      const best = bestReception(target, home, 'home')
-      expect(best.quality, `zona ${zoneOf(target.row, target.col)}`).toBe(
-        expected[zoneOf(target.row, target.col)],
-      )
-    }
+  it('detecta costuras solo en celdas vacías con dos receptores', () => {
+    expect(isSeam(home, cell('home', 0, 0), 'home')).toBe(false)
+    expect(isSeam(home, cell('home', 1, 0), 'home')).toBe(true)
   })
 })
 
 describe('armado', () => {
-  it('el armador preserva la calidad del pase', () => {
-    expect(setQuality(3, homeSetter, 0)).toBe(3)
-    expect(setQuality(2, homeSetter, 1)).toBe(2)
+  it('baja la calidad por distancia, clase y técnica', () => {
+    expect(setQuality(3, homeSetter, 1)).toBe(3)
     expect(setQuality(1, homeSetter, 1)).toBe(1)
+    expect(setQuality(3, homeSetter, 2)).toBe(3)
+    expect(setQuality(3, homeSetter, 3)).toBe(2)
+    expect(setQuality(3, homeMiddle, 1)).toBe(0)
+    expect(setQuality(1, homeLibero, 2)).toBe(1)
+    expect(setQuality(3, homeLibero, 2)).toBe(3)
     expect(setQuality(0, homeSetter, 1)).toBe(0)
   })
+})
 
-  it('a distancia 2 pierde un punto de calidad', () => {
-    expect(setQuality(3, homeSetter, 2)).toBe(2)
-    expect(setQuality(2, homeSetter, 2)).toBe(1)
+describe('valor de ataque', () => {
+  it('suma potencia, armado, bonus y resta columna lejana', () => {
+    expect(attackValue(homeMiddle, 'power', 2, cell('away', 0, 0))).toBe(11)
+    expect(attackValue(homeMiddle, 'power', 2, cell('away', 0, 2))).toBe(10)
+    expect(attackValue(homeMiddle, 'quick', 2, cell('away', 0, 1))).toBe(11)
+    expect(attackValue(homeMiddle, 'placement', 2, cell('away', 0, 1))).toBe(9)
   })
 
-  it('el no-armador destruye la jugada', () => {
-    expect(setQuality(3, homeLibero, 0)).toBe(1)
-    expect(setQuality(3, homeMiddle, 0)).toBe(0)
+  it('da bonus de esquina a colocación y finta', () => {
+    expect(attackValue(homeMiddle, 'placement', 2, cell('away', 0, 0))).toBe(11)
+    expect(attackValue(homeMiddle, 'placement', 2, cell('away', 0, 1))).toBe(9)
+    expect(attackValue(homeMiddle, 'tip', 2, cell('away', 0, 0))).toBe(11)
   })
 })
 
-describe('bloqueo', () => {
-  it('reproduce la tabla de valores de bloqueo', () => {
-    expect(blockValue([])).toBe(0)
-    expect(blockValue([homeSetter])).toBe(4)
-    expect(blockValue([homeMiddle])).toBe(6)
-    expect(blockValue([homeMiddle, homeSetter])).toBe(7)
+describe('legalidad de ataques', () => {
+  it('el líbero no puede atacar', () => {
+    const check = isAttackAllowed({
+      attacker: homeLibero,
+      kind: 'power',
+      target: cell('away', 0, 0),
+    })
+    expect(check.ok).toBe(false)
+    expect(attackKindsFor(homeLibero)).toEqual([])
   })
 
-  it('solo cuenta al bloqueador de la misma columna', () => {
+  it('el rápido es solo del central y el pipe solo del opuesto de fondo', () => {
     expect(
-      blockersFor(home, cell('home', 1, 0)).map((p) => p.classId),
-    ).toEqual(['middle'])
+      isAttackAllowed({
+        attacker: homeSetter,
+        kind: 'quick',
+        target: cell('away', 0, 1),
+      }).ok,
+    ).toBe(false)
     expect(
-      blockersFor(home, cell('home', 1, 1)).map((p) => p.classId),
-    ).toEqual(['setter'])
-    expect(blockersFor(home, cell('home', 1, 2))).toEqual([])
-  })
-})
-
-describe('defensa', () => {
-  it('reproduce la tabla de valores de defensa', () => {
-    expect(defenseValue(homeLibero, true, false)).toBe(7)
-    expect(defenseValue(homeLibero, false, false)).toBe(6)
-    expect(defenseValue(homeMiddle, true, false)).toBe(6)
-    expect(defenseValue(homeMiddle, false, false)).toBe(5)
-    expect(defenseValue(homeSetter, true, false)).toBe(5)
-    expect(defenseValue(homeSetter, false, false)).toBe(4)
-    expect(defenseValue(homeOpposite, true, false)).toBe(4)
-    expect(defenseValue(homeOpposite, false, false)).toBe(3)
-  })
-
-  it('la finta suma uno al defensor', () => {
-    expect(defenseValue(homeLibero, true, true)).toBe(8)
-  })
-})
-
-describe('ataque', () => {
-  const attacker = of('away', 'opposite')
-
-  it('el ataque de potencia sin bloqueo usa Potencia + armado + 1', () => {
-    expect(attackBase(attacker, 'power', 2, 1)).toBe(8)
-    expect(attackValue(attacker, 'power', 2, 1, 0)).toBe(8)
+      isAttackAllowed({
+        attacker: homeMiddle,
+        kind: 'quick',
+        target: cell('away', 0, 1),
+      }).ok,
+    ).toBe(true)
+    expect(
+      isAttackAllowed({
+        attacker: homeOpposite,
+        kind: 'pipe',
+        target: cell('away', 0, 1),
+      }).ok,
+    ).toBe(true)
+    expect(
+      isAttackAllowed({
+        attacker: homeMiddle,
+        kind: 'pipe',
+        target: cell('away', 0, 1),
+      }).ok,
+    ).toBe(false)
   })
 
-  it('cada bloqueador resta 2', () => {
-    expect(attackValue(attacker, 'power', 2, 1, 1)).toBe(6)
-    expect(attackValue(attacker, 'power', 2, 1, 2)).toBe(4)
+  it('el rápido entra por el centro y la finta cae al fondo', () => {
+    expect(
+      isAttackAllowed({
+        attacker: homeMiddle,
+        kind: 'quick',
+        target: cell('away', 0, 0),
+      }).ok,
+    ).toBe(false)
+    expect(
+      isAttackAllowed({
+        attacker: homeMiddle,
+        kind: 'quick',
+        target: cell('away', 1, 1),
+      }).ok,
+    ).toBe(true)
+    expect(
+      isAttackAllowed({
+        attacker: homeSetter,
+        kind: 'tip',
+        target: cell('away', 0, 0),
+      }).ok,
+    ).toBe(false)
+    expect(
+      isAttackAllowed({
+        attacker: homeSetter,
+        kind: 'tip',
+        target: cell('away', 1, 2),
+      }).ok,
+    ).toBe(true)
   })
 
-  it('atacar a dos columnas de distancia resta uno', () => {
-    expect(attackBase(attacker, 'power', 2, 2)).toBe(7)
-  })
-
-  it('wipe y finta ignoran la penalización por bloqueo', () => {
-    expect(attackValue(attacker, 'wipe', 2, 1, 2)).toBe(6)
-    expect(attackValue(attacker, 'tip', 2, 1, 2)).toBe(6)
-  })
-
-  it('reproduce los escenarios de la hoja de números', () => {
-    const onlyLibero = [homeLibero]
-    const onlyOpposite = [homeOpposite]
-    const oppositeInCell = {
+  it('un jugador de fondo no ataca desde la red y el ataque va al rival', () => {
+    const netOpposite: Player = {
       ...homeOpposite,
-      cell: cell('home', 1, 1),
+      cell: { side: 'home', row: 0, col: 2 },
     }
+    expect(
+      isAttackAllowed({
+        attacker: netOpposite,
+        kind: 'power',
+        target: cell('away', 0, 0),
+      }).ok,
+    ).toBe(false)
+    expect(
+      isAttackAllowed({
+        attacker: homeMiddle,
+        kind: 'power',
+        target: cell('home', 0, 0),
+      }).ok,
+    ).toBe(false)
+  })
 
-    const powerVsLibero = evaluateAttack(
-      attacker,
-      2,
-      'power',
-      cell('home', 1, 1),
-      onlyLibero,
+  it('lista los ataques legales por clase y posición', () => {
+    expect(attackKindsFor(homeMiddle).sort()).toEqual(
+      ['placement', 'power', 'quick', 'tip', 'wipe'].sort(),
     )
-    expect(powerVsLibero).toMatchObject({
-      A: 8,
-      B: 0,
-      A_pass: 8,
-      D: 7,
-      outcome: 'dig',
-      digQuality: 0,
-    })
-
-    const powerVsOpposite = evaluateAttack(
-      attacker,
-      2,
-      'power',
-      cell('home', 1, 1),
-      [oppositeInCell],
+    expect(attackKindsFor(homeOpposite).sort()).toEqual(
+      ['placement', 'pipe', 'power', 'tip', 'wipe'].sort(),
     )
-    expect(powerVsOpposite).toMatchObject({ outcome: 'point' })
-
-    const powerVsMiddle = evaluateAttack(
-      attacker,
-      2,
-      'power',
-      cell('home', 1, 0),
-      [homeMiddle],
+    expect(attackKindsFor(homeSetter).sort()).toEqual(
+      ['placement', 'power', 'tip', 'wipe'].sort(),
     )
-    expect(powerVsMiddle).toMatchObject({ A: 6, B: 6, outcome: 'blocked' })
-
-    const quickVsLibero = evaluateAttack(
-      of('away', 'middle'),
-      2,
-      'quick',
-      cell('home', 1, 1),
-      onlyLibero,
-    )
-    expect(quickVsLibero).toMatchObject({
-      A: 8,
-      A_pass: 8,
-      D: 7,
-      outcome: 'dig',
-      digQuality: 0,
-    })
-
-    const tipVsLibero = evaluateAttack(
-      attacker,
-      2,
-      'tip',
-      cell('home', 1, 1),
-      onlyLibero,
-    )
-    expect(tipVsLibero).toMatchObject({
-      A: 6,
-      A_pass: 6,
-      D: 8,
-      outcome: 'dig',
-      digQuality: 2,
-    })
-
-    const tipVsOpposite = evaluateAttack(
-      attacker,
-      2,
-      'tip',
-      cell('home', 1, 1),
-      [oppositeInCell],
-    )
-    expect(tipVsOpposite).toMatchObject({
-      A: 6,
-      D: 5,
-      outcome: 'dig',
-      digQuality: 0,
-    })
-
-    const wipeVsLibero = evaluateAttack(
-      attacker,
-      2,
-      'wipe',
-      cell('home', 1, 1),
-      onlyLibero,
-    )
-    expect(wipeVsLibero).toMatchObject({
-      A: 6,
-      A_pass: 6,
-      D: 7,
-      outcome: 'dig',
-      digQuality: 1,
-    })
-
-    const placementVsOpposite = evaluateAttack(
-      of('away', 'setter'),
-      2,
-      'placement',
-      cell('home', 1, 2),
-      onlyOpposite,
-    )
-    expect(placementVsOpposite).toMatchObject({
-      A: 4,
-      D: 4,
-      outcome: 'dig',
-      digQuality: 1,
-    })
   })
 })
 
-describe('validación de ataques', () => {
-  const defending = home
-
-  it('el líbero no ataca', () => {
-    const check = isAttackAllowed({
-      attacker: of('away', 'libero'),
-      kind: 'placement',
-      tempo: 'high',
-      target: cell('home', 1, 1),
-      defending,
-    })
-    expect(check.ok).toBe(false)
+describe('duelo oculto', () => {
+  it('elige al defensor que lidera cada esquema', () => {
+    expect(schemeDefender(defense, 'wall', target).player.id).toBe('d0')
+    expect(schemeDefender(defense, 'spread', target).player.id).toBe('d0')
+    expect(schemeDefender(defense, 'deep', target).player.id).toBe('d2')
+    expect(schemeDefender(defense, 'libero', target).player.id).toBe('d2')
   })
 
-  it('el rápido es solo del central', () => {
-    const check = isAttackAllowed({
-      attacker: of('away', 'opposite'),
-      kind: 'quick',
-      tempo: 'quick',
-      target: cell('home', 1, 1),
-      defending,
-    })
-    expect(check.ok).toBe(false)
+  it('el rápido no deja acomodar al defensor', () => {
+    const positioned = schemeDefender(defense, 'wall', target)
+    const quick = schemeDefender(defense, 'wall', target, true)
+    expect(quick.value).toBe(positioned.value - 1)
+    expect(quick.player.id).toBe(positioned.player.id)
   })
 
-  it('el pipe exige al opuesto desde el fondo', () => {
-    const ok = isAttackAllowed({
-      attacker: of('away', 'opposite'),
-      kind: 'pipe',
-      tempo: 'back',
-      target: cell('home', 1, 1),
-      defending,
-    })
-    expect(ok.ok).toBe(true)
-
-    const forward = { ...of('away', 'opposite'), cell: cell('away', 0, 1) }
-    const bad = isAttackAllowed({
-      attacker: forward,
-      kind: 'pipe',
-      tempo: 'back',
-      target: cell('home', 1, 1),
-      defending,
-    })
-    expect(bad.ok).toBe(false)
+  it('aplica el matchup del esquema contra cada ataque', () => {
+    for (const scheme of DEFENSE_SCHEMES) {
+      for (const kind of [
+        'power',
+        'placement',
+        'quick',
+        'pipe',
+        'wipe',
+        'tip',
+      ] as AttackKind[]) {
+        expect(duel(scheme, kind, 2).edge).toBe(SCHEME_EDGE[scheme][kind])
+      }
+    }
   })
 
-  it('el wipe necesita un bloqueador en la columna', () => {
-    const withBlocker = isAttackAllowed({
-      attacker: of('away', 'opposite'),
-      kind: 'wipe',
-      tempo: 'high',
-      target: cell('home', 1, 0),
-      defending,
-    })
-    expect(withBlocker.ok).toBe(true)
+  it('convierte el delta en punto, bloqueo o dig', () => {
+    const point = duel('spread', 'power', 2)
+    expect(point.A).toBe(10)
+    expect(point.D).toBe(6)
+    expect(point.outcome).toBe('point')
+    expect(point.digQuality).toBeNull()
 
-    const emptyColumn = isAttackAllowed({
-      attacker: of('away', 'opposite'),
-      kind: 'wipe',
-      tempo: 'high',
-      target: cell('home', 1, 1),
-      defending: [homeLibero],
+    const dig = duel('wall', 'power', 2)
+    expect(dig.A).toBe(10)
+    expect(dig.D).toBe(11)
+    expect(dig.outcome).toBe('dig')
+    expect(dig.digQuality).toBe(1)
+    expect(dig.defenderId).toBe('d0')
+
+    const blocked = duel('wall', 'power', 0)
+    expect(blocked.outcome).toBe('blocked')
+    expect(blocked.digQuality).toBeNull()
+    expect(blocked.blockerIds).toEqual(['d0', 'd1'])
+  })
+
+  it('solo bloquean los esquemas de red; el resto hace dig', () => {
+    const weak: Player = {
+      ...attacker,
+      stats: { ...attacker.stats, potencia: 1 },
+    }
+    const deep = duel('deep', 'power', 0, weak)
+    expect(deep.outcome).toBe('dig')
+    expect(deep.digQuality).toBe(3)
+    expect(deep.blockerIds).toEqual([])
+  })
+
+  it('usa la stat que corresponde a cada esquema', () => {
+    expect(SCHEME_STAT.wall).toBe('lectura')
+    expect(SCHEME_STAT.spread).toBe('velocidad')
+    expect(SCHEME_STAT.deep).toBe('lectura')
+    expect(SCHEME_STAT.libero).toBe('tecnica')
+  })
+})
+
+describe('pistas y apuesta oculta', () => {
+  const base = createMatch({ playerSide: 'home' })
+
+  const attackState = (
+    attackerId: string,
+    scheme: DefenseScheme,
+  ): GameState => ({
+    ...base,
+    phase: 'ATTACK',
+    possession: 'home',
+    attackerId,
+    hiddenChoice: { type: 'defense', side: 'away', scheme },
+  })
+
+  const defendState = (planKind: AttackKind, targetCell: GameState['ball']['cell']) =>
+    ({
+      ...base,
+      phase: 'DEFEND',
+      possession: 'away',
+      attackerId: 'away-middle',
+      hiddenChoice: {
+        type: 'attack',
+        side: 'away',
+        plan: { kind: planKind, target: targetCell },
+      },
+    }) as GameState
+
+  it('da dos pistas con Lectura 4 o más y una con menos', () => {
+    const smart = tellsFor(attackState('home-middle', 'wall'))
+    expect(smart).toHaveLength(2)
+    expect(smart[0].text).toContain('Dos manos se levantan')
+
+    const normal = tellsFor(attackState('home-opposite', 'wall'))
+    expect(normal).toHaveLength(1)
+    expect(normal[0].text).toContain('Dos manos se levantan')
+  })
+
+  it('no revela el resultado ni el nombre del esquema', () => {
+    const tells = tellsFor(attackState('home-middle', 'spread'))
+    const all = tells.map((tell) => tell.text).join(' ')
+    expect(all).not.toContain('Bloqueo abierto')
+    expect(all).not.toContain('punto')
+    expect(all).not.toContain('dig')
+  })
+
+  it('describe el ataque rival sin mostrar probabilidades', () => {
+    const tells = tellsFor(defendState('pipe', cell('home', 1, 0)))
+    expect(tells).toHaveLength(2)
+    expect(tells[0].text).toContain('Pipe')
+    expect(tells[1].text).toContain('zona 5')
+    expect(tells.map((tell) => tell.text).join(' ')).not.toContain('%')
+  })
+
+  it('no devuelve pistas sin apuesta oculta', () => {
+    expect(tellsFor(base)).toEqual([])
+  })
+
+  it('compromete a la IA antes de la elección del jugador', () => {
+    const state: GameState = {
+      ...base,
+      phase: 'ATTACK',
+      possession: 'home',
+      attackerId: 'home-middle',
+      setQuality: 2,
+      ap: 2,
+    }
+    const next = withHiddenChoice(state, mulberry32(7))
+    expect(next.hiddenChoice?.type).toBe('defense')
+    if (next.hiddenChoice?.type === 'defense') {
+      expect(next.hiddenChoice.side).toBe('away')
+      expect(DEFENSE_SCHEMES).toContain(next.hiddenChoice.scheme)
+    }
+    expect(withHiddenChoice(next, mulberry32(7))).toBe(next)
+  })
+
+  it('compromete un ataque legal cuando el jugador defiende', () => {
+    const state: GameState = {
+      ...base,
+      phase: 'DEFEND',
+      possession: 'away',
+      attackerId: 'away-middle',
+      setQuality: 2,
+      ap: 2,
+    }
+    const next = withHiddenChoice(state, mulberry32(9))
+    expect(next.hiddenChoice?.type).toBe('attack')
+    if (next.hiddenChoice?.type === 'attack') {
+      const plan = next.hiddenChoice.plan
+      const awayAttacker = awayPlayers.find(
+        (player) => player.id === next.attackerId,
+      )!
+      expect(next.hiddenChoice.side).toBe('away')
+      expect(
+        isAttackAllowed({
+          attacker: awayAttacker,
+          kind: plan.kind,
+          target: plan.target,
+        }).ok,
+      ).toBe(true)
+      expect(ATTACK_AP_COST[plan.kind]).toBeLessThanOrEqual(state.ap)
+    }
+  })
+
+  it('limpia la apuesta oculta fuera de ataque/defensa', () => {
+    const state: GameState = {
+      ...base,
+      hiddenChoice: { type: 'defense', side: 'away', scheme: 'wall' },
+    }
+    expect(withHiddenChoice(state, mulberry32(1)).hiddenChoice).toBeNull()
+  })
+})
+
+describe('economía de energía', () => {
+  it('arranca en 2, tope 3 y costos por ataque', () => {
+    expect(AP_PER_POSSESSION).toBe(2)
+    expect(AP_MAX).toBe(3)
+    expect(ATTACK_AP_COST).toEqual({
+      power: 2,
+      placement: 0,
+      quick: 0,
+      pipe: 3,
+      wipe: 2,
+      tip: 0,
     })
-    expect(emptyColumn.ok).toBe(false)
   })
 })

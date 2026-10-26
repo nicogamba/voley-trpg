@@ -46,23 +46,26 @@ export const initialBall = (server: Side): Ball => ({
 export type CreateMatchOptions = {
   targetScore?: number
   server?: Side
+  playerSide?: Side
 }
 
 export const createMatch = (options: CreateMatchOptions = {}): GameState => {
   const server = options.server ?? 'home'
   return {
     phase: 'SERVE',
+    playerSide: options.playerSide ?? 'home',
     score: { home: 0, away: 0 },
     server,
     possession: server,
     ap: 0,
-    reactionAp: 0,
     players: createPlayers(),
     ball: initialBall(server),
     passQuality: 0,
     setQuality: 0,
-    tempo: null,
     attackerId: null,
+    hiddenChoice: null,
+    attackHistory: [],
+    defenseHistory: [],
     targetScore: options.targetScore ?? TARGET_SCORE,
     winner: null,
     rallyNumber: 1,
@@ -79,13 +82,12 @@ export const resetForServe = (state: GameState, server: Side): void => {
   state.server = server
   state.possession = server
   state.ap = 0
-  state.reactionAp = 0
   state.players = createPlayers()
   state.ball = initialBall(server)
   state.passQuality = 0
   state.setQuality = 0
-  state.tempo = null
   state.attackerId = null
+  state.hiddenChoice = null
   state.rallyNumber += 1
   state.touches = 0
   state.rallyAttacks = 0
@@ -102,10 +104,9 @@ export const startPossession = (
   state.ball = ball
   state.passQuality = passQuality as GameState['passQuality']
   state.setQuality = 0
-  state.tempo = null
   state.attackerId = null
+  state.hiddenChoice = null
   state.ap = AP_PER_POSSESSION
-  state.reactionAp = 0
   state.touches = 1
   state.phase = 'SET'
 }

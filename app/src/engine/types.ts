@@ -30,8 +30,6 @@ export type BallPressure = 'free' | 'serve' | 'tip' | 'attack'
 
 export type Quality = 0 | 1 | 2 | 3
 
-export type Tempo = 'high' | 'quick' | 'back'
-
 export type AttackKind =
   | 'power'
   | 'placement'
@@ -40,12 +38,20 @@ export type AttackKind =
   | 'wipe'
   | 'tip'
 
+/** Esquema defensivo comprometido antes de ver la jugada rival. */
+export type DefenseScheme = 'wall' | 'spread' | 'deep' | 'libero'
+
+export type AttackPlan = {
+  kind: AttackKind
+  target: Cell
+}
+
 export type Phase =
   | 'SERVE'
   | 'RECEIVE'
   | 'SET'
-  | 'BLOCK_COMMIT'
   | 'ATTACK'
+  | 'DEFEND'
   | 'MATCH_END'
 
 export type Ball = {
@@ -60,19 +66,41 @@ export type LogEntry = {
   tone: 'neutral' | 'good' | 'bad'
 }
 
+export type AttackRecord = {
+  side: Side
+  kind: AttackKind
+}
+
+export type DefenseRecord = {
+  side: Side
+  scheme: DefenseScheme
+}
+
+/**
+ * La respuesta que espera oculta hasta el cut-in.
+ * - `defense`: la eligió la IA mientras el jugador ataca.
+ * - `attack`: la eligió la IA mientras el jugador defiende.
+ */
+export type HiddenChoice =
+  | { type: 'defense'; side: Side; scheme: DefenseScheme }
+  | { type: 'attack'; side: Side; plan: AttackPlan }
+
 export type GameState = {
   phase: Phase
+  /** Lado que maneja el jugador. La IA controla el otro. */
+  playerSide: Side
   score: Record<Side, number>
   server: Side
   possession: Side
   ap: number
-  reactionAp: number
   players: Player[]
   ball: Ball
   passQuality: Quality
   setQuality: Quality
-  tempo: Tempo | null
   attackerId: string | null
+  hiddenChoice: HiddenChoice | null
+  attackHistory: AttackRecord[]
+  defenseHistory: DefenseRecord[]
   targetScore: number
   winner: Side | null
   rallyNumber: number
@@ -83,28 +111,26 @@ export type GameState = {
 
 export type AttackOutcome = 'point' | 'dig' | 'blocked'
 
-export type AttackResolution = {
+export type DuelResolution = {
+  /** Ataque: potencia + armado + bonificación + zona. */
   A: number
-  B: number
-  A_pass: number
+  /** Defensa: esquema + stat + zona + matchup. */
   D: number
+  /** Ventaja del esquema contra ese tipo de ataque. */
+  edge: number
+  /** Cobertura del esquema sobre la zona elegida. */
+  zone: number
   outcome: AttackOutcome
   digQuality: Quality | null
   defenderId: string | null
   blockerIds: string[]
+  scheme: DefenseScheme
 }
 
 export type PointReason = 'ace' | 'error' | 'block' | 'attack' | 'cap'
 
 export type EngineEvent =
   | { type: 'SERVE'; server: Side; target: Cell }
-  | {
-      type: 'MOVE'
-      playerId: string
-      from: Cell
-      to: Cell
-      phase: Phase
-    }
   | {
       type: 'RECEIVE'
       playerId: string | null
@@ -117,17 +143,16 @@ export type EngineEvent =
       type: 'SET'
       setterId: string
       targetId: string
-      tempo: Tempo
       quality: Quality
       outcome: 'ok' | 'error'
     }
-  | { type: 'SHIFT'; playerId: string; from: Cell; to: Cell }
   | {
       type: 'ATTACK'
       playerId: string
       kind: AttackKind
       target: Cell
-      resolution: AttackResolution
+      scheme: DefenseScheme
+      resolution: DuelResolution
     }
   | {
       type: 'POINT'
@@ -140,17 +165,14 @@ export type EngineEvent =
 
 export type Command =
   | { type: 'SERVE'; target: Cell }
-  | { type: 'MOVE'; playerId: string; to: Cell }
   | { type: 'RECEIVE'; playerId: string | null }
   | {
       type: 'SET'
       setterId: string
       targetId: string
-      tempo: Tempo
     }
-  | { type: 'SHIFT'; playerId: string; to: Cell }
-  | { type: 'COMMIT_BLOCK' }
   | { type: 'ATTACK'; playerId: string; kind: AttackKind; target: Cell }
+  | { type: 'DEFEND'; scheme: DefenseScheme }
 
 export type ReduceResult = {
   state: GameState

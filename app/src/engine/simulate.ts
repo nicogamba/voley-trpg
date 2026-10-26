@@ -1,20 +1,22 @@
-import { chooseCommand, mulberry32 } from './ai'
+import { chooseCommand, mulberry32, withHiddenChoice } from './ai'
 import { reduce } from './commands'
 import { createMatch } from './state'
 import type {
   AttackKind,
   AttackOutcome,
+  DefenseScheme,
   EngineEvent,
   Quality,
   Side,
 } from './types'
 
-export type AttackRecord = {
+export type SimulatedAttack = {
   kind: AttackKind
+  scheme: DefenseScheme
   outcome: AttackOutcome
   A: number
-  B: number
   D: number
+  edge: number
   digQuality: Quality | null
 }
 
@@ -26,7 +28,7 @@ export type MatchMetrics = {
   passQualities: Quality[]
   setQualities: Quality[]
   setErrors: number
-  attacks: AttackRecord[]
+  attacks: SimulatedAttack[]
   rallies: number
   attacksPerRally: number[]
 }
@@ -80,10 +82,11 @@ const analyze = (events: EngineEvent[]): MatchMetrics => {
       case 'ATTACK':
         metrics.attacks.push({
           kind: event.kind,
+          scheme: event.scheme,
           outcome: event.resolution.outcome,
           A: event.resolution.A,
-          B: event.resolution.B,
           D: event.resolution.D,
+          edge: event.resolution.edge,
           digQuality: event.resolution.digQuality,
         })
         attacksInRally += 1
@@ -105,6 +108,7 @@ export type PlayMatchOptions = {
   targetScore?: number
   maxCommands?: number
   server?: Side
+  playerSide?: Side
 }
 
 export const playMatch = (
@@ -115,6 +119,7 @@ export const playMatch = (
   let state = createMatch({
     targetScore: options.targetScore,
     server: options.server,
+    playerSide: options.playerSide,
   })
   const events: EngineEvent[] = []
   const maxCommands = options.maxCommands ?? 3000
@@ -127,7 +132,7 @@ export const playMatch = (
       )
     }
     const result = reduce(state, chooseCommand(state, rng))
-    state = result.state
+    state = withHiddenChoice(result.state, rng)
     events.push(...result.events)
     commands += 1
   }
@@ -164,6 +169,7 @@ export type AggregateReport = {
   errorPoints: number
   capPoints: number
   attackKinds: Record<AttackKind, number>
+  defenseSchemes: Record<DefenseScheme, number>
   digDistribution: [number, number, number, number]
   avgAttacksPerRally: number
   blockRate: number
@@ -212,6 +218,12 @@ export const simulateMatches = (
       wipe: 0,
       tip: 0,
     },
+    defenseSchemes: {
+      wall: 0,
+      spread: 0,
+      deep: 0,
+      libero: 0,
+    },
     digDistribution: [0, 0, 0, 0],
     avgAttacksPerRally: 0,
     blockRate: 0,
@@ -253,7 +265,8 @@ export const simulateMatches = (
     for (const attack of report.metrics.attacks) {
       aggregate.attacks += 1
       aggregate.attackKinds[attack.kind] += 1
-      if (attack.B > 0) aggregate.contestedAttacks += 1
+      aggregate.defenseSchemes[attack.scheme] += 1
+      if (attack.edge !== 0) aggregate.contestedAttacks += 1
       if (attack.outcome === 'blocked') aggregate.blocks += 1
       if (attack.outcome === 'dig') {
         aggregate.digs += 1
@@ -307,9 +320,12 @@ export const formatReport = (report: AggregateReport): string => {
     `Pases: ${report.passDistribution.join(' / ')} (perfectos ${percent(report.perfectPassRate)})`,
     `Armados: ${report.setDistribution.join(' / ')} | errores: ${report.setErrors}`,
     `Ataques: ${report.attacks} | bloqueos ${percent(report.blockRate)} | digs ${percent(report.digRate)} | puntos ${percent(report.pointRate)}`,
-    `Ataques con bloqueo delante: ${percent(report.contestedRate)}`,
+    `Duelos con matchup: ${percent(report.contestedRate)}`,
     `Tipos: ${Object.entries(report.attackKinds)
       .map(([kind, count]) => `${kind} ${count}`)
+      .join(', ')}`,
+    `Esquemas: ${Object.entries(report.defenseSchemes)
+      .map(([scheme, count]) => `${scheme} ${count}`)
       .join(', ')}`,
     `Digs por calidad: ${report.digDistribution.join(' / ')}`,
     `Puntos: ataque ${report.attackPoints}, bloqueo ${report.blockPoints}, error ${report.errorPoints}, tope ${report.capPoints}`,

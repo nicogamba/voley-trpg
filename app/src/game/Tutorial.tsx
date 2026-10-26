@@ -1,4 +1,5 @@
 import type { GameState, Phase } from '../engine'
+import PixelPortrait from './PixelPortrait'
 
 type TitleProps = {
   muted: boolean
@@ -9,45 +10,17 @@ type TitleProps = {
 }
 
 const CourtMark = () => (
-  <div className="relative mx-auto mt-6 w-full max-w-[280px]">
-    <div className="grid grid-cols-3 gap-1.5">
+  <div className="title-court" aria-hidden="true">
+    <div className="title-court-side title-court-away">
       {Array.from({ length: 6 }, (_, index) => (
-        <div
-          key={index}
-          className={`h-9 rounded-xl border ${
-            index < 3
-              ? 'border-rose-300/20 bg-rose-500/10'
-              : 'border-indigo-300/25 bg-indigo-500/12'
-          }`}
-        />
+        <span key={index} />
       ))}
     </div>
-    <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-center">
-      <span className="h-px flex-1 bg-gradient-to-r from-transparent to-white/60" />
-      <span className="mx-2 h-2.5 w-2.5 rounded-full bg-yellow-300 shadow-lg shadow-yellow-300/60" />
-      <span className="h-px flex-1 bg-gradient-to-l from-transparent to-white/60" />
-    </div>
-    <div className="pointer-events-none absolute inset-0 grid grid-cols-3 gap-1.5">
-      <div className="col-start-2 row-start-1 flex items-center justify-center">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-400 text-xs font-black text-emerald-950 ring-2 ring-emerald-200">
-          A
-        </span>
-      </div>
-      <div className="col-start-1 row-start-2 flex items-center justify-center">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-xs font-black text-amber-950 ring-2 ring-amber-200">
-          C
-        </span>
-      </div>
-      <div className="col-start-3 row-start-2 flex items-center justify-center">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-400 text-xs font-black text-rose-950 ring-2 ring-rose-200">
-          O
-        </span>
-      </div>
-      <div className="col-start-2 row-start-2 flex items-center justify-center">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400 text-xs font-black text-cyan-950 ring-2 ring-cyan-200">
-          L
-        </span>
-      </div>
+    <div className="title-court-net" />
+    <div className="title-court-side title-court-home">
+      {Array.from({ length: 6 }, (_, index) => (
+        <span key={index} />
+      ))}
     </div>
   </div>
 )
@@ -59,61 +32,55 @@ export const TitleScreen = ({
   onToggleMuted,
   onHelp,
 }: TitleProps) => (
-  <div className="mx-auto flex min-h-svh w-full max-w-md flex-col justify-center px-5 py-8">
-    <div className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-2xl shadow-indigo-950/60">
-      <div className="flex items-start justify-between">
+  <div className="title-shell">
+    <div className="title-card scanlines">
+      <div className="title-top">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-300/80">
-            Vóley táctico
-          </p>
-          <h1 className="mt-1 text-5xl font-black leading-none tracking-tight text-white">
-            ZONA<span className="text-cyan-300"> 3</span>
+          <p className="title-kicker">VÓLEY TÁCTICO POR TURNOS</p>
+          <h1 className="title-logo">
+            ZONA<span>3</span>
           </h1>
         </div>
         <button
           type="button"
           onClick={onToggleMuted}
           aria-label={muted ? 'Activar sonido' : 'Silenciar'}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-base text-white/70 transition hover:border-white/40 hover:text-white"
+          className="pixel-btn icon-btn"
         >
           {muted ? '🔇' : '🔊'}
         </button>
       </div>
 
-      <p className="mt-3 text-sm leading-snug text-white/60">
-        Un set a 7. Armá la jugada, leé el bloqueo y defendé tu zona. Cinco
-        minutos, decisiones perfectas: no hay dados.
-      </p>
+      <div className="title-hero">
+        <PixelPortrait classId="setter" side="home" size={76} />
+        <div className="title-hero-text">
+          <p className="title-claim">
+            El rival ya eligió.
+            <br />
+            <span>Leé la jugada y ganá el duelo.</span>
+          </p>
+          <p className="title-sub">
+            Un set a 7 · 4v4 · 5-8 minutos. Sin dados: stats, esquema y zona.
+          </p>
+        </div>
+        <PixelPortrait classId="libero" side="away" size={76} />
+      </div>
 
       <CourtMark />
 
-      <div className="mt-6 grid gap-2">
-        <button
-          type="button"
-          onClick={onTutorial}
-          className="rounded-2xl bg-cyan-300 px-4 py-3 text-sm font-black text-cyan-950 shadow-lg shadow-cyan-300/20 transition hover:bg-cyan-200 active:scale-[0.98]"
-        >
-          Tutorial · 2 rallies
+      <div className="title-actions">
+        <button type="button" onClick={onTutorial} className="pixel-btn primary big">
+          <span className="blink-arrow">▶</span> JUGAR EL TUTORIAL
         </button>
-        <button
-          type="button"
-          onClick={onPlay}
-          className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold text-white/80 transition hover:border-white/35 hover:text-white active:scale-[0.98]"
-        >
-          Partido rápido
+        <button type="button" onClick={onPlay} className="pixel-btn secondary">
+          PARTIDO RÁPIDO
         </button>
-        <button
-          type="button"
-          onClick={onHelp}
-          className="rounded-2xl px-4 py-1.5 text-xs font-semibold text-white/45 transition hover:text-white/80"
-        >
-          Cómo se juega
+        <button type="button" onClick={onHelp} className="pixel-btn ghost">
+          CÓMO SE JUEGA
         </button>
       </div>
     </div>
-    <p className="mt-4 text-center text-[10px] uppercase tracking-[0.3em] text-white/25">
-      Mobile · un set · 4v4
-    </p>
+    <p className="title-footer">MOBILE · UN SET · 4V4 · TECMO CUP</p>
   </div>
 )
 
@@ -123,64 +90,64 @@ type HelpProps = {
 
 const HELP_CARDS = [
   {
-    title: 'Tu turno empieza con el saque',
-    body: 'Tocá una zona del campo rival. El número del preview es la calidad de pase que consigue: más alta, mejor para vos.',
+    title: 'Tres pasos, una jugada',
+    body: 'Cada posesión es recepción → armado → ataque. Elegís una acción por paso. El tablero te dice dónde tocar.',
   },
   {
-    title: 'La calidad es tu moneda',
-    body: 'Un pase perfecto devuelve 1 AP. El armador (A) reparte: Alto habilita potencia y colocación; Rápido solo al central.',
+    title: 'El rival ya se comprometió',
+    body: 'Cuando atacás, la defensa rival ya eligió su esquema, pero está oculta. Cuando defendés, su ataque ya está elegido.',
   },
   {
-    title: 'Leé antes de rematar',
-    body: 'El preview muestra A (ataque), B (bloqueo) y D (defensa). Si A no supera a B, te bloquean. Finta y wipe ignoran el bloqueo.',
+    title: 'Las pistas nunca mienten',
+    body: 'Antes de elegir ves pistas veraces sobre la apuesta rival. Con Lectura 4 o más ves dos pistas; con menos, una.',
   },
   {
-    title: 'Defender también es jugar',
-    body: 'En la lectura defensiva movés bloqueadores dentro de su fila. Condicionás el ataque rival; después el líbero (L) hace el resto.',
+    title: 'El cut-in revela el duelo',
+    body: 'Recién al final ves qué eligió el rival y cómo se resolvió. No hay dados: cuentan stats, esquema y zona.',
+  },
+  {
+    title: 'Energía',
+    body: 'Empezás con 2 de energía. Un pase perfecto te lleva a 3. Potencia y Wipe cuestan 2; Pipe cuesta 3; Colocación, Rápido y Finta son gratis.',
+  },
+  {
+    title: 'Cada ataque tiene su zona',
+    body: 'El Rápido solo entra por el centro. La Finta solo cae al fondo, y busca las esquinas. El Pipe exige al opuesto desde el fondo. Colocación y Finta pegan mejor en las esquinas.',
+  },
+  {
+    title: 'Cuatro formas de defender',
+    body: 'Muro frena potencia y rápidos. Bloqueo abierto frena finas y colocaciones. Defensa profunda aguanta el fondo. Líbero atento lee las manos y cubre el centro.',
   },
 ]
 
 export const HelpSheet = ({ onClose }: HelpProps) => (
-  <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 p-3 backdrop-blur-sm sm:items-center">
-    <div className="animate-slide-up w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950 p-5 shadow-2xl">
-      <div className="flex items-start justify-between gap-3">
+  <div className="sheet-overlay">
+    <div className="sheet-card scanlines">
+      <div className="sheet-head">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-300/80">
-            Cómo se juega
-          </p>
-          <h2 className="mt-1 text-xl font-black text-white">Cuatro ideas</h2>
+          <p className="sheet-kicker">MANUAL DE BOLSILLO</p>
+          <h2 className="sheet-title">CÓMO SE JUEGA</h2>
         </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:border-white/40 hover:text-white"
+          className="pixel-btn icon-btn"
         >
           ×
         </button>
       </div>
-      <div className="mt-4 grid gap-2.5">
+      <div className="sheet-list">
         {HELP_CARDS.map((card, index) => (
-          <div
-            key={card.title}
-            className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5"
-          >
-            <p className="text-sm font-bold text-white/90">
-              <span className="mr-1.5 text-cyan-300">{index + 1}.</span>
-              {card.title}
+          <div key={card.title} className="sheet-item">
+            <p className="sheet-item-title">
+              <span>{index + 1}.</span> {card.title}
             </p>
-            <p className="mt-0.5 text-xs leading-snug text-white/55">
-              {card.body}
-            </p>
+            <p className="sheet-item-body">{card.body}</p>
           </div>
         ))}
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        className="mt-4 w-full rounded-2xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-cyan-950 transition hover:bg-cyan-200"
-      >
-        Entendido
+      <button type="button" onClick={onClose} className="pixel-btn primary">
+        ENTENDIDO
       </button>
     </div>
   </div>
@@ -189,23 +156,23 @@ export const HelpSheet = ({ onClose }: HelpProps) => (
 const HINTS: Partial<Record<Phase, { title: string; body: string }>> = {
   SERVE: {
     title: 'Saque',
-    body: 'Tocá una zona del campo rival. El preview muestra el pase que consigue: buscá una zona débil, no la más cómoda.',
+    body: 'Tocá una zona del campo rival. Buscá dónde el rival reciba peor.',
   },
   RECEIVE: {
     title: 'Recepción',
-    body: 'Elegí quién recibe. El líbero (L) es el mejor. Si no llega, movelo antes con 1 AP: la celda exacta da +1.',
+    body: 'Elegí quién recibe. El líbero es el más seguro y deja al armador cerca.',
   },
   SET: {
     title: 'Armado',
-    body: 'El armador (A) reparte. Alto habilita potencia y colocación; Rápido solo al central y cuesta 1 AP.',
-  },
-  BLOCK_COMMIT: {
-    title: 'Lectura defensiva',
-    body: 'Movés bloqueadores dentro de su fila con 2 AP de reacción. No siempre bloquean: condicionan hacia dónde ataca el rival.',
+    body: 'Elegí atacante. El armador reparte según la calidad del pase.',
   },
   ATTACK: {
-    title: 'Remate',
-    body: 'Elegí tipo y tocá la zona. El preview dice punto, dig o bloqueo antes de confirmar. Finta y wipe ignoran el bloqueo; el líbero los lee.',
+    title: 'Tu jugada',
+    body: 'El rival ya eligió su defensa. Mirá las pistas y elegí tipo de ataque.',
+  },
+  DEFEND: {
+    title: 'Tu defensa',
+    body: 'El rival ya eligió su ataque. Mirá las pistas y elegí un esquema.',
   },
 }
 
@@ -219,21 +186,15 @@ export const Coach = ({ game, onSkip }: CoachProps) => {
   if (!hint) return null
   const rally = Math.min(game.rallyNumber, 2)
   return (
-    <div className="game-coach animate-slide-up rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 shadow-lg shadow-cyan-950/30">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200/80">
-          Tutorial · rally {rally} de 2
-        </p>
-        <button
-          type="button"
-          onClick={onSkip}
-          className="text-[10px] font-semibold text-white/40 underline-offset-2 transition hover:text-white/70 hover:underline"
-        >
-          Saltar
+    <div className="coach-box">
+      <div className="coach-head">
+        <span>TUTORIAL · RALLY {rally} DE 2</span>
+        <button type="button" onClick={onSkip} className="coach-skip">
+          SALTAR
         </button>
       </div>
-      <p className="mt-0.5 text-xs font-bold text-white/85">{hint.title}</p>
-      <p className="text-[11px] leading-snug text-white/55">{hint.body}</p>
+      <p className="coach-title">{hint.title}</p>
+      <p className="coach-body">{hint.body}</p>
     </div>
   )
 }
@@ -244,25 +205,20 @@ type CompleteProps = {
 }
 
 export const TutorialComplete = ({ game, onFinish }: CompleteProps) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm">
-    <div className="animate-pop w-full max-w-sm rounded-[2rem] border border-cyan-300/30 bg-slate-950 p-5 text-center shadow-2xl shadow-cyan-950/50">
-      <p className="text-4xl">🏐</p>
-      <h2 className="mt-2 text-2xl font-black text-white">
-        Tutorial completado
-      </h2>
-      <p className="mt-2 text-sm leading-snug text-white/55">
-        Ya sabés sacar, recibir, armar y rematar. Ahora jugá un set completo a 7
-        contra la IA.
+  <div className="sheet-overlay">
+    <div className="sheet-card scanlines complete-card">
+      <p className="complete-icon">🏐</p>
+      <p className="sheet-kicker">ENTRENAMIENTO LISTO</p>
+      <h2 className="sheet-title">YA SABÉS LEER EL DUELO</h2>
+      <p className="complete-copy">
+        Viste cómo el rival se compromete antes que vos y cómo las pistas te
+        ayudan a elegir. Ahora jugá un set completo a 7.
       </p>
-      <p className="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-cyan-200/70">
-        Marcador {game.score.home} — {game.score.away}
+      <p className="complete-score">
+        {game.score[game.playerSide]} — {game.score[game.playerSide === 'home' ? 'away' : 'home']}
       </p>
-      <button
-        type="button"
-        onClick={onFinish}
-        className="mt-4 w-full rounded-2xl bg-cyan-300 px-4 py-3 text-sm font-black text-cyan-950 transition hover:bg-cyan-200"
-      >
-        Jugar el partido
+      <button type="button" onClick={onFinish} className="pixel-btn primary">
+        JUGAR EL PARTIDO
       </button>
     </div>
   </div>

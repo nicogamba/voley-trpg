@@ -4,8 +4,8 @@ import {
   createMatch,
   EngineError,
   mulberry32,
-  otherSide,
   reduce,
+  withHiddenChoice,
 } from '../engine'
 import type { Command, EngineEvent, GameState, Side } from '../engine'
 import { playSfx, setSfxMuted, unlockAudio } from './sound'
@@ -17,14 +17,22 @@ export type Screen = 'title' | 'game'
 export const actingSide = (state: GameState): Side | null => {
   if (state.phase === 'MATCH_END') return null
   if (state.phase === 'SERVE') return state.server
-  if (state.phase === 'BLOCK_COMMIT') return otherSide(state.possession)
+  if (state.phase === 'ATTACK' || state.phase === 'DEFEND') {
+    return state.playerSide
+  }
   return state.possession
 }
 
 export const isPlayerTurn = (state: GameState): boolean =>
-  actingSide(state) === PLAYER_SIDE
+  actingSide(state) === state.playerSide
 
 type AttackEvent = Extract<EngineEvent, { type: 'ATTACK' }>
+
+export type DuelReveal = {
+  event: AttackEvent
+  rallyNumber: number
+  score: Record<Side, number>
+}
 
 type GameStore = {
   game: GameState
@@ -32,9 +40,8 @@ type GameStore = {
   tutorial: boolean
   muted: boolean
   lastEvent: EngineEvent | null
-  lastAttack: AttackEvent | null
+  duel: DuelReveal | null
   toast: string | null
-  playerPast: GameState[]
   aiRng: () => number
   startGame: (options?: { tutorial?: boolean }) => void
   finishTutorial: () => void
@@ -43,12 +50,13 @@ type GameStore = {
   toggleMuted: () => void
   dispatch: (command: Command, actor: 'player' | 'ai') => void
   aiStep: () => void
-  undo: () => void
   reset: () => void
   clearToast: () => void
+  dismissDuel: () => void
 }
 
-const newGame = () => createMatch({ server: PLAYER_SIDE })
+const newGame = () =>
+  createMatch({ server: PLAYER_SIDE, playerSide: PLAYER_SIDE })
 
 const feedback = (events: EngineEvent[]) => {
   const point = events.find((event) => event.type === 'POINT')
@@ -84,10 +92,6 @@ const feedback = (events: EngineEvent[]) => {
     case 'SET':
       playSfx('set')
       break
-    case 'MOVE':
-    case 'SHIFT':
-      playSfx('move')
-      break
   }
 }
 
@@ -97,9 +101,8 @@ export const useGame = create<GameStore>((set, get) => ({
   tutorial: false,
   muted: false,
   lastEvent: null,
-  lastAttack: null,
+  duel: null,
   toast: null,
-  playerPast: [],
   aiRng: mulberry32(20261026),
   startGame: (options = {}) => {
     unlockAudio()
@@ -109,9 +112,8 @@ export const useGame = create<GameStore>((set, get) => ({
       screen: 'game',
       tutorial: options.tutorial ?? false,
       lastEvent: null,
-      lastAttack: null,
+      duel: null,
       toast: null,
-      playerPast: [],
       aiRng: mulberry32(Date.now() % 1_000_000),
     })
   },
@@ -121,9 +123,8 @@ export const useGame = create<GameStore>((set, get) => ({
       screen: 'game',
       tutorial: false,
       lastEvent: null,
-      lastAttack: null,
+      duel: null,
       toast: null,
-      playerPast: [],
       aiRng: mulberry32(Date.now() % 1_000_000),
     })
   },
@@ -138,9 +139,8 @@ export const useGame = create<GameStore>((set, get) => ({
       screen: 'title',
       tutorial: false,
       lastEvent: null,
-      lastAttack: null,
+      duel: null,
       toast: null,
-      playerPast: [],
     })
   },
   toggleMuted: () => {
@@ -150,21 +150,24 @@ export const useGame = create<GameStore>((set, get) => ({
     if (!muted) playSfx('click')
   },
   dispatch: (command, actor) => {
-    const current = get().game
+    const { game, aiRng } = get()
     try {
-      const result = reduce(current, command)
+      const result = reduce(game, command)
+      const next = withHiddenChoice(result.state, aiRng)
       const attack = result.events.find(
         (event): event is AttackEvent => event.type === 'ATTACK',
       )
       feedback(result.events)
       set({
-        game: result.state,
+        game: next,
         lastEvent: result.events[result.events.length - 1] ?? null,
-        lastAttack: attack ?? null,
-        playerPast:
-          actor === 'player'
-            ? [...get().playerPast, current].slice(-8)
-            : [],
+        duel: attack
+          ? {
+              event: attack,
+              rallyNumber: game.rallyNumber,
+              score: { ...next.score },
+            }
+          : null,
         toast: null,
       })
     } catch (error) {
@@ -176,10 +179,12 @@ export const useGame = create<GameStore>((set, get) => ({
             : 'Esa acción no es posible.',
       })
     }
+    void actor
   },
   aiStep: () => {
     const { game, aiRng } = get()
     if (game.phase === 'MATCH_END') return
+    if (isPlayerTurn(game)) return
     try {
       const command = chooseCommand(game, aiRng)
       get().dispatch(command, 'ai')
@@ -190,29 +195,16 @@ export const useGame = create<GameStore>((set, get) => ({
       })
     }
   },
-  undo: () => {
-    const past = get().playerPast
-    const previous = past[past.length - 1]
-    if (!previous) return
-    playSfx('click')
-    set({
-      game: previous,
-      playerPast: past.slice(0, -1),
-      toast: null,
-      lastEvent: null,
-      lastAttack: null,
-    })
-  },
   reset: () => {
     playSfx('click')
     set({
       game: newGame(),
       lastEvent: null,
-      lastAttack: null,
+      duel: null,
       toast: null,
-      playerPast: [],
       aiRng: mulberry32(Date.now() % 1_000_000),
     })
   },
   clearToast: () => set({ toast: null }),
+  dismissDuel: () => set({ duel: null }),
 }))

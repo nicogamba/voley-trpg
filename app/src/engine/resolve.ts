@@ -1,17 +1,20 @@
-import { otherSide, sameCell } from './geometry'
+import { otherSide, reaches, sameCell } from './geometry'
 import {
   ATTACK_BONUS,
+  ATTACK_KINDS,
   BACK_ROW_CLASSES,
-  TEMPO_ATTACKS,
+  SCHEME_BASE,
+  SCHEME_EDGE,
+  SCHEME_STAT,
 } from './rules'
 import type {
   AttackKind,
-  AttackResolution,
   Cell,
   ClassId,
+  DefenseScheme,
+  DuelResolution,
   Player,
   Quality,
-  Tempo,
 } from './types'
 
 export const clamp = (value: number, min: number, max: number): number =>
@@ -56,8 +59,10 @@ export const setQuality = (
   setter: Player,
   distance: number,
 ): Quality => {
-  const distancePenalty = distance > 1 ? 1 : 0
-  const nonSetterPenalty = setter.classId === 'setter' ? 0 : 2
+  const distancePenalty = distance > 2 ? 1 : 0
+  // El líbero es el armador de emergencia: no paga penalización de clase.
+  const nonSetterPenalty =
+    setter.classId === 'setter' || setter.classId === 'libero' ? 0 : 2
   const lowTechniquePenalty = setter.stats.tecnica <= 3 ? 1 : 0
   return clamp(
     passQuality - distancePenalty - nonSetterPenalty - lowTechniquePenalty,
@@ -70,110 +75,201 @@ export const attackBase = (
   attacker: Player,
   kind: AttackKind,
   setQ: Quality,
-  targetCol: number,
+  target: Cell,
 ): number => {
-  const farColumn = Math.abs(attacker.cell.col - targetCol) >= 2 ? 1 : 0
-  return attacker.stats.potencia + setQ + ATTACK_BONUS[kind] - farColumn
+  const farColumn = Math.abs(attacker.cell.col - target.col) >= 2 ? 1 : 0
+  return attacker.stats.potencia + setQ + ATTACK_BONUS[kind] + 3 - farColumn
 }
+
+/** Colocación y finta castigan las esquinas; el resto ataca donde puede. */
+export const attackZoneBonus = (
+  kind: AttackKind,
+  target: Cell,
+): number =>
+  (kind === 'placement' || kind === 'tip') && target.col !== 1 ? 2 : 0
 
 export const attackValue = (
   attacker: Player,
   kind: AttackKind,
   setQ: Quality,
-  targetCol: number,
-  blockerCount: number,
+  target: Cell,
+): number => attackBase(attacker, kind, setQ, target) + attackZoneBonus(kind, target)
+
+export type SchemeDefender = {
+  player: Player
+  value: number
+}
+
+const schemePool = (
+  defending: Player[],
+  scheme: DefenseScheme,
+): Player[] => {
+  if (scheme === 'wall') {
+    const wall = defending.filter(
+      (player) => player.cell.row === 0 && player.classId !== 'libero',
+    )
+    if (wall.length > 0) return wall
+  }
+  if (scheme === 'deep') {
+    const back = defending.filter((player) => player.cell.row === 1)
+    if (back.length > 0) return back
+  }
+  return defending
+}
+
+const schemePlayerValue = (
+  player: Player,
+  scheme: DefenseScheme,
+  target: Cell,
+  ignorePosition = false,
 ): number => {
-  const ignoresBlock = kind === 'wipe' || kind === 'tip'
-  const blockPenalty = ignoresBlock ? 0 : 2 * blockerCount
-  return attackBase(attacker, kind, setQ, targetCol) - blockPenalty
+  let value = player.stats[SCHEME_STAT[scheme]]
+  if (scheme === 'wall' && player.classId === 'middle') value += 1
+  if (scheme === 'deep' && player.classId === 'libero') value += 1
+  if (scheme === 'spread' && player.classId === 'libero') value += 1
+  if (scheme === 'libero' && player.classId === 'libero') value += 2
+  if (!ignorePosition) {
+    if (scheme === 'wall' || scheme === 'deep') {
+      if (player.cell.col === target.col) value += 1
+    } else if (reaches(player.cell, target)) {
+      value += 1
+    }
+  }
+  return value
 }
 
-export const blockValue = (blockers: Player[]): number => {
-  if (blockers.length === 0) return 0
-  const best = Math.max(
-    ...blockers.map(
-      (blocker) =>
-        blocker.stats.lectura + (blocker.classId === 'middle' ? 1 : 0),
-    ),
-  )
-  return best + (blockers.length > 1 ? 1 : 0)
-}
-
-export const defenseValue = (
-  defender: Player,
-  inCell: boolean,
-  isTip: boolean,
-): number =>
-  defender.stats.lectura +
-  (defender.classId === 'libero' ? 1 : 0) +
-  (inCell ? 1 : 0) +
-  (isTip ? 1 : 0)
-
-/**
- * En el tablero 3x2 solo hay un jugador de red por columna. El doble bloqueo
- * (B=7) queda como valor de referencia para una cancha más grande.
- */
-export const blockersFor = (
+export const schemeDefender = (
   defending: Player[],
+  scheme: DefenseScheme,
   target: Cell,
-): Player[] =>
-  defending.filter(
-    (p) =>
-      p.cell.row === 0 &&
-      p.cell.col === target.col &&
-      p.classId !== 'libero',
-  )
-
-export const bestDefenderFor = (
-  defending: Player[],
-  target: Cell,
-  isTip: boolean,
-): { player: Player | null; value: number } => {
-  let best: Player | null = null
+  ignorePosition = false,
+): SchemeDefender => {
+  const pool = schemePool(defending, scheme)
+  let best = pool[0] ?? defending[0]
   let bestValue = -1
-  for (const player of defending) {
-    if (!reachesCell(player, target)) continue
-    const value = defenseValue(player, sameCell(player.cell, target), isTip)
-    if (value > bestValue) {
+  for (const player of pool) {
+    const value = schemePlayerValue(player, scheme, target, ignorePosition)
+    if (
+      value > bestValue ||
+      (value === bestValue && player.id.localeCompare(best?.id ?? '') < 0)
+    ) {
       best = player
       bestValue = value
     }
   }
-  return { player: best, value: bestValue }
+  return { player: best, value: Math.max(0, bestValue) }
 }
 
-const reachesCell = (player: Player, target: Cell): boolean =>
-  player.cell.side === target.side &&
-  Math.abs(player.cell.row - target.row) +
-    Math.abs(player.cell.col - target.col) <=
-    1
+export const schemeZoneBonus = (
+  scheme: DefenseScheme,
+  target: Cell,
+): number => {
+  switch (scheme) {
+    case 'wall':
+      return target.row === 0 ? 1 : 0
+    case 'spread':
+      return 1
+    case 'deep':
+      return target.row === 1 ? 1 : 0
+    case 'libero':
+      return target.col === 1 ? 1 : 0
+  }
+}
+
+export const schemeBlockerIds = (
+  defending: Player[],
+  scheme: DefenseScheme,
+  defender: Player,
+): string[] => {
+  if (scheme === 'wall') {
+    const wall = defending.filter(
+      (player) => player.cell.row === 0 && player.classId !== 'libero',
+    )
+    if (wall.length > 0) return wall.map((player) => player.id)
+    return [defender.id]
+  }
+  if (scheme === 'spread' && defender.cell.row === 0) return [defender.id]
+  return []
+}
+
+export const resolveDuel = (params: {
+  attacker: Player
+  kind: AttackKind
+  target: Cell
+  setQuality: Quality
+  defending: Player[]
+  scheme: DefenseScheme
+}): DuelResolution => {
+  const { attacker, kind, target, setQuality: setQ, defending, scheme } = params
+  // El rápido llega antes de que la defensa acomode su posición.
+  const { player: defender, value } = schemeDefender(
+    defending,
+    scheme,
+    target,
+    kind === 'quick',
+  )
+  const zone = schemeZoneBonus(scheme, target)
+  const edge = SCHEME_EDGE[scheme][kind]
+  const A = attackValue(attacker, kind, setQ, target)
+  const D = SCHEME_BASE[scheme] + value + zone + edge
+  const delta = A - D
+  const netScheme = scheme === 'wall' || scheme === 'spread'
+  const blockerIds = schemeBlockerIds(defending, scheme, defender)
+
+  if (delta >= 1) {
+    return {
+      A,
+      D,
+      edge,
+      zone,
+      outcome: 'point',
+      digQuality: null,
+      defenderId: defender.id,
+      blockerIds,
+      scheme,
+    }
+  }
+
+  if (netScheme && delta <= -2) {
+    return {
+      A,
+      D,
+      edge,
+      zone,
+      outcome: 'blocked',
+      digQuality: null,
+      defenderId: defender.id,
+      blockerIds,
+      scheme,
+    }
+  }
+
+  // Un dig nunca es calidad 0: si el duelo quedó empatado, la bola
+  // igual queda jugable (pase malo) para que el rally siga vivo.
+  const digQuality = (delta === 0 ? 1 : clamp(-delta, 1, 3)) as Quality
+  return {
+    A,
+    D,
+    edge,
+    zone,
+    outcome: 'dig',
+    digQuality,
+    defenderId: defender.id,
+    blockerIds,
+    scheme,
+  }
+}
 
 export type AttackCheck =
   | { ok: true }
   | { ok: false; reason: string }
 
-export const isAttackAllowed = (params: {
-  attacker: Player
-  kind: AttackKind
-  tempo: Tempo
-  target: Cell
-  defending: Player[]
-}): AttackCheck => {
-  const { attacker, kind, tempo, target, defending } = params
+const kindAllowedForPlayer = (
+  attacker: Player,
+  kind: AttackKind,
+): AttackCheck => {
   if (attacker.classId === 'libero') {
     return { ok: false, reason: 'El líbero no puede atacar.' }
-  }
-  if (!TEMPO_ATTACKS[tempo].includes(kind)) {
-    return { ok: false, reason: 'Ese ataque no corresponde al tempo.' }
-  }
-  if (BACK_ROW_CLASSES.includes(attacker.classId) && attacker.cell.row === 0) {
-    return {
-      ok: false,
-      reason: 'Un jugador de fondo no puede atacar desde la red.',
-    }
-  }
-  if (target.side !== otherSide(attacker.side)) {
-    return { ok: false, reason: 'El ataque debe ir al campo rival.' }
   }
   if (kind === 'quick' && attacker.classId !== 'middle') {
     return { ok: false, reason: 'El ataque rápido es exclusivo del central.' }
@@ -183,86 +279,37 @@ export const isAttackAllowed = (params: {
       return { ok: false, reason: 'El pipe exige al opuesto desde el fondo.' }
     }
   }
-  if (kind === 'wipe' && blockersFor(defending, target).length === 0) {
-    return { ok: false, reason: 'El wipe necesita un bloqueador en la columna.' }
+  if (BACK_ROW_CLASSES.includes(attacker.classId) && attacker.cell.row === 0) {
+    return {
+      ok: false,
+      reason: 'Un jugador de fondo no puede atacar desde la red.',
+    }
   }
   return { ok: true }
 }
 
-export const evaluateAttack = (
-  attacker: Player,
-  setQ: Quality,
-  kind: AttackKind,
-  target: Cell,
-  defending: Player[],
-): AttackResolution => {
-  const blockers = blockersFor(defending, target)
-  const B = blockValue(blockers)
-  const A = attackValue(attacker, kind, setQ, target.col, blockers.length)
-  const isTip = kind === 'tip'
-  const isWipe = kind === 'wipe'
-  const { player: defender, value: D } = bestDefenderFor(
-    defending,
-    target,
-    isTip,
-  )
-
-  if (!isTip && !isWipe && A <= B) {
-    return {
-      A,
-      B,
-      A_pass: 0,
-      D,
-      outcome: 'blocked',
-      digQuality: null,
-      defenderId: null,
-      blockerIds: blockers.map((b) => b.id),
-    }
+export const isAttackAllowed = (params: {
+  attacker: Player
+  kind: AttackKind
+  target: Cell
+}): AttackCheck => {
+  const { attacker, kind, target } = params
+  const base = kindAllowedForPlayer(attacker, kind)
+  if (!base.ok) return base
+  if (target.side !== otherSide(attacker.side)) {
+    return { ok: false, reason: 'El ataque debe ir al campo rival.' }
   }
-
-  const A_pass = isTip || isWipe ? A : A - (blockers.length > 0 ? 1 : 0)
-  const blockerIds = blockers.map((b) => b.id)
-
-  if (!defender) {
-    return {
-      A,
-      B,
-      A_pass,
-      D: 0,
-      outcome: 'point',
-      digQuality: null,
-      defenderId: null,
-      blockerIds,
-    }
+  if (kind === 'quick' && target.col !== 1) {
+    return { ok: false, reason: 'El rápido solo entra por el centro.' }
   }
-
-  const delta = D - A_pass
-  if (delta < -1) {
-    return {
-      A,
-      B,
-      A_pass,
-      D,
-      outcome: 'point',
-      digQuality: null,
-      defenderId: null,
-      blockerIds,
-    }
+  if (kind === 'tip' && target.row !== 1) {
+    return { ok: false, reason: 'La finta busca el fondo, no la red.' }
   }
-
-  const digQuality =
-    delta === -1 ? 0 : delta === 0 ? 1 : (Math.min(3, delta) as Quality)
-  return {
-    A,
-    B,
-    A_pass,
-    D,
-    outcome: 'dig',
-    digQuality,
-    defenderId: defender.id,
-    blockerIds,
-  }
+  return { ok: true }
 }
+
+export const attackKindsFor = (attacker: Player): AttackKind[] =>
+  ATTACK_KINDS.filter((kind) => kindAllowedForPlayer(attacker, kind).ok)
 
 export const qualityLabel = (quality: Quality): string =>
   ['error', 'mala', 'buena', 'perfecta'][quality]

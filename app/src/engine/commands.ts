@@ -4,37 +4,36 @@ import {
   reaches,
   sameCell,
   sideName,
-  cellsOfSide,
   zoneLabel,
 } from './geometry'
 import {
+  AP_MAX,
   AP_PER_POSSESSION,
   ATTACK_AP_COST,
   MAX_RALLY_ATTACKS,
   PERFECT_PASS_AP_REFUND,
   PRESSURE_VALUE,
-  REACTION_AP,
-  TEMPO_AP_COST,
-  TEMPO_ATTACKS,
+  SCHEME_LABEL,
 } from './rules'
 import {
-  bestDefenderFor,
+  attackKindsFor,
   isAttackAllowed,
-  evaluateAttack,
   receptionQuality,
   receptionValue,
+  resolveDuel,
   setQuality,
 } from './resolve'
 import {
-  isOccupied,
   playerById,
   playersOf,
   resetForServe,
   startPossession,
 } from './state'
 import type {
+  AttackKind,
   Cell,
   Command,
+  DefenseScheme,
   EngineEvent,
   GameState,
   Player,
@@ -61,6 +60,20 @@ const clone = (state: GameState): GameState => ({
     cell: { ...player.cell },
   })),
   ball: { ...state.ball, cell: { ...state.ball.cell } },
+  hiddenChoice:
+    state.hiddenChoice?.type === 'attack'
+      ? {
+          ...state.hiddenChoice,
+          plan: {
+            ...state.hiddenChoice.plan,
+            target: { ...state.hiddenChoice.plan.target },
+          },
+        }
+      : state.hiddenChoice
+        ? { ...state.hiddenChoice }
+        : null,
+  attackHistory: state.attackHistory.map((record) => ({ ...record })),
+  defenseHistory: state.defenseHistory.map((record) => ({ ...record })),
   log: [...state.log],
 })
 
@@ -76,6 +89,20 @@ const addLog = (
 const qualityText = (quality: Quality): string =>
   ['error', 'mala', 'buena', 'perfecta'][quality]
 
+const toneFor = (state: GameState, side: Side): 'good' | 'bad' =>
+  side === state.playerSide ? 'good' : 'bad'
+
+const pushHistory = (
+  state: GameState,
+  attack: { side: Side; kind: AttackKind },
+  defense: { side: Side; scheme: DefenseScheme },
+): void => {
+  state.attackHistory.push(attack)
+  state.defenseHistory.push(defense)
+  if (state.attackHistory.length > 12) state.attackHistory.shift()
+  if (state.defenseHistory.length > 12) state.defenseHistory.shift()
+}
+
 const awardPoint = (
   state: GameState,
   side: Side,
@@ -86,7 +113,7 @@ const awardPoint = (
   addLog(
     state,
     `Punto para ${sideName(side)} (${state.score.home}-${state.score.away}).`,
-    side === 'home' ? 'good' : 'bad',
+    toneFor(state, side),
   )
   const events: EngineEvent[] = [
     { type: 'POINT', side, reason, score: { ...state.score } },
@@ -94,7 +121,7 @@ const awardPoint = (
   if (state.score[side] >= state.targetScore) {
     state.phase = 'MATCH_END'
     state.winner = side
-    addLog(state, `¡${sideName(side)} gana el set!`, side === 'home' ? 'good' : 'bad')
+    addLog(state, `¡${sideName(side)} gana el set!`, toneFor(state, side))
     events.push({
       type: 'MATCH_END',
       winner: side,
@@ -107,39 +134,113 @@ const awardPoint = (
   return events
 }
 
-const movePlayer = (
+const capRally = (
   state: GameState,
-  player: Player,
-  to: Cell,
-  cost: number,
-): void => {
-  state.ap = Math.max(0, state.ap - cost)
-  const index = state.players.findIndex((p) => p.id === player.id)
-  state.players[index] = {
-    ...state.players[index],
-    cell: { ...to },
+  attacker: Player,
+): { state: GameState; events: EngineEvent[] } => {
+  const next = clone(state)
+  addLog(next, 'El rally se estira demasiado: se cierra el punto.', 'neutral')
+  return {
+    state: next,
+    events: awardPoint(next, otherSide(attacker.side), 'cap'),
   }
 }
 
-const validateReactionShift = (
+const applyDuel = (
   state: GameState,
-  player: Player,
-  to: Cell,
-): void => {
-  assert(
-    state.phase === 'BLOCK_COMMIT',
-    'La reacción solo ocurre antes del ataque.',
+  attacker: Player,
+  kind: AttackKind,
+  target: Cell,
+  scheme: DefenseScheme,
+  apCost: number,
+): { state: GameState; events: EngineEvent[] } => {
+  const defending = playersOf(state, otherSide(attacker.side))
+  const resolution = resolveDuel({
+    attacker,
+    kind,
+    target,
+    setQuality: state.setQuality,
+    defending,
+    scheme,
+  })
+  const next = clone(state)
+  next.ap = Math.max(0, next.ap - apCost)
+  next.touches = 3
+  next.rallyAttacks += 1
+  next.hiddenChoice = null
+  pushHistory(
+    next,
+    { side: attacker.side, kind },
+    { side: otherSide(attacker.side), scheme },
   )
-  assert(
-    player.side === otherSide(state.possession),
-    'Solo reacciona el equipo defensor.',
+
+  const events: EngineEvent[] = [
+    {
+      type: 'ATTACK',
+      playerId: attacker.id,
+      kind,
+      target: { ...target },
+      scheme,
+      resolution,
+    },
+  ]
+
+  if (resolution.outcome === 'blocked') {
+    addLog(
+      next,
+      `${attacker.name} ataca, pero ${SCHEME_LABEL[scheme]} lo frena. Punto rival.`,
+      toneFor(next, otherSide(attacker.side)),
+    )
+    return {
+      state: next,
+      events: [
+        ...events,
+        ...awardPoint(next, otherSide(attacker.side), 'block'),
+      ],
+    }
+  }
+
+  if (resolution.outcome === 'point') {
+    addLog(
+      next,
+      `${attacker.name} gana el duelo contra ${SCHEME_LABEL[scheme]}: ¡punto!`,
+      toneFor(next, attacker.side),
+    )
+    return {
+      state: next,
+      events: [...events, ...awardPoint(next, attacker.side, 'attack')],
+    }
+  }
+
+  const defender = playerById(next, resolution.defenderId)
+  assert(defender, 'El dig no tiene defensor.')
+  const digQuality = resolution.digQuality!
+  addLog(
+    next,
+    `${defender.name} salva con ${SCHEME_LABEL[scheme]}: dig ${qualityText(digQuality)}.`,
+    digQuality >= 2 ? toneFor(next, defender.side) : 'neutral',
   )
-  assert(state.reactionAp >= 1, 'No quedan AP de reacción.')
-  assert(to.side === player.side, 'No se puede cruzar la red.')
-  assert(to.row === player.cell.row, 'La reacción se mueve dentro de la misma fila.')
-  assert(!sameCell(player.cell, to), 'El jugador ya está en esa celda.')
-  assert(moveDistance(player.cell, to) === 1, 'Cada movimiento cuesta 1 AP.')
-  assert(!isOccupied(state, to, player.id), 'La celda está ocupada.')
+  startPossession(
+    next,
+    otherSide(attacker.side),
+    {
+      cell: { ...defender.cell },
+      pressure: 'attack',
+      quality: digQuality,
+      lastTouchId: defender.id,
+    },
+    digQuality,
+  )
+  if (digQuality === 3) {
+    next.ap = Math.min(
+      AP_MAX,
+      next.ap + PERFECT_PASS_AP_REFUND,
+    )
+  }
+  return {
+    state: next,
+    events: [...events, { type: 'PHASE', phase: 'SET' }],
+  }
 }
 
 export const reduce = (
@@ -162,11 +263,10 @@ export const reduce = (
       }
       next.possession = otherSide(state.server)
       next.ap = AP_PER_POSSESSION
-      next.reactionAp = 0
       next.passQuality = 0
       next.setQuality = 0
-      next.tempo = null
       next.attackerId = null
+      next.hiddenChoice = null
       next.touches = 0
       next.rallyAttacks = 0
       next.phase = 'RECEIVE'
@@ -179,41 +279,6 @@ export const reduce = (
         events: [
           { type: 'SERVE', server: state.server, target: { ...command.target } },
           { type: 'PHASE', phase: 'RECEIVE' },
-        ],
-      }
-    }
-
-    case 'MOVE': {
-      assert(
-        state.phase === 'RECEIVE' || state.phase === 'SET',
-        'No se puede mover en esta fase.',
-      )
-      const player = playerById(state, command.playerId)
-      assert(player, 'Jugador inexistente.')
-      assert(player.side === state.possession, 'Solo mueve el equipo en posesión.')
-      assert(command.to.side === player.side, 'No se puede cruzar la red.')
-      assert(!sameCell(player.cell, command.to), 'El jugador ya está ahí.')
-      assert(
-        moveDistance(player.cell, command.to) === 1,
-        'Cada movimiento cuesta 1 AP y es de una celda.',
-      )
-      assert(!isOccupied(state, command.to, player.id), 'La celda está ocupada.')
-      assert(state.ap >= 1, 'No quedan AP.')
-
-      const next = clone(state)
-      const from = { ...player.cell }
-      movePlayer(next, player, command.to, 1)
-      addLog(next, `${sideName(player.side)} mueve al ${player.name}.`)
-      return {
-        state: next,
-        events: [
-          {
-            type: 'MOVE',
-            playerId: player.id,
-            from,
-            to: { ...command.to },
-            phase: state.phase,
-          },
         ],
       }
     }
@@ -284,9 +349,8 @@ export const reduce = (
         }
       }
 
-      const refund =
-        quality === 3 ? PERFECT_PASS_AP_REFUND : 0
-      next.ap = Math.min(AP_PER_POSSESSION, next.ap + refund)
+      const refund = quality === 3 ? PERFECT_PASS_AP_REFUND : 0
+      next.ap = Math.min(AP_MAX, next.ap + refund)
       next.ball = {
         cell: { ...receiver.cell },
         pressure: 'free',
@@ -295,10 +359,11 @@ export const reduce = (
       }
       next.passQuality = quality
       next.touches = 1
+      next.hiddenChoice = null
       next.phase = 'SET'
       addLog(
         next,
-        `${receiver.name} recibe: pase ${qualityText(quality)}${refund ? ' (+1 AP)' : ''}.`,
+        `${receiver.name} recibe: pase ${qualityText(quality)}${refund ? ' (+1 energía)' : ''}.`,
         quality === 3 ? 'good' : 'neutral',
       )
       return {
@@ -333,39 +398,14 @@ export const reduce = (
       )
       assert(setter.id !== target.id, 'El armador no puede armarse a sí mismo.')
       assert(target.classId !== 'libero', 'El líbero no puede atacar.')
-
-      const tempoCost = TEMPO_AP_COST[command.tempo]
-      assert(state.ap >= tempoCost, 'No hay AP para ese tempo.')
-      if (command.tempo === 'quick') {
-        assert(target.classId === 'middle', 'El ataque rápido es para el central.')
-      }
-      if (command.tempo === 'back') {
-        assert(target.classId === 'opposite', 'El pipe es para el opuesto.')
-        assert(target.cell.row === 1, 'El opuesto debe atacar desde el fondo.')
-      }
-
-      const defendingTeam = playersOf(state, otherSide(side))
-      const hasLegalAttack = cellsOfSide(otherSide(side)).some((cell) =>
-        TEMPO_ATTACKS[command.tempo].some(
-          (kind) =>
-            isAttackAllowed({
-              attacker: target,
-              kind,
-              tempo: command.tempo,
-              target: cell,
-              defending: defendingTeam,
-            }).ok,
-        ),
-      )
       assert(
-        hasLegalAttack,
+        attackKindsFor(target).length > 0,
         'Ese atacante no tiene un ataque legal desde su posición.',
       )
 
       const distance = moveDistance(setter.cell, state.ball.cell)
       const quality = setQuality(state.passQuality, setter, distance)
       const next = clone(state)
-      next.ap -= tempoCost
 
       if (quality === 0) {
         addLog(next, `El armado de ${setter.name} se queda corto.`, 'bad')
@@ -374,7 +414,6 @@ export const reduce = (
             type: 'SET',
             setterId: setter.id,
             targetId: target.id,
-            tempo: command.tempo,
             quality,
             outcome: 'error',
           },
@@ -392,11 +431,10 @@ export const reduce = (
         lastTouchId: setter.id,
       }
       next.setQuality = quality
-      next.tempo = command.tempo
       next.attackerId = target.id
       next.touches = 2
-      next.reactionAp = REACTION_AP
-      next.phase = 'BLOCK_COMMIT'
+      next.hiddenChoice = null
+      next.phase = side === state.playerSide ? 'ATTACK' : 'DEFEND'
       addLog(
         next,
         `${setter.name} arma ${qualityText(quality)} para ${target.name}.`,
@@ -409,157 +447,82 @@ export const reduce = (
             type: 'SET',
             setterId: setter.id,
             targetId: target.id,
-            tempo: command.tempo,
             quality,
             outcome: 'ok',
           },
-          { type: 'PHASE', phase: 'BLOCK_COMMIT' },
+          { type: 'PHASE', phase: next.phase },
         ],
-      }
-    }
-
-    case 'SHIFT': {
-      const player = playerById(state, command.playerId)
-      assert(player, 'Jugador inexistente.')
-      validateReactionShift(state, player, command.to)
-      const next = clone(state)
-      next.reactionAp -= 1
-      const from = { ...player.cell }
-      const index = next.players.findIndex((p) => p.id === player.id)
-      next.players[index] = { ...next.players[index], cell: { ...command.to } }
-      addLog(next, `${sideName(player.side)} ajusta al ${player.name}.`)
-      return {
-        state: next,
-        events: [
-          {
-            type: 'SHIFT',
-            playerId: player.id,
-            from,
-            to: { ...command.to },
-          },
-        ],
-      }
-    }
-
-    case 'COMMIT_BLOCK': {
-      assert(state.phase === 'BLOCK_COMMIT', 'No es la fase de reacción.')
-      const next = clone(state)
-      next.phase = 'ATTACK'
-      return {
-        state: next,
-        events: [{ type: 'PHASE', phase: 'ATTACK' }],
       }
     }
 
     case 'ATTACK': {
+      assert(state.phase === 'ATTACK', 'No es la fase de ataque.')
+      const hidden = state.hiddenChoice
       assert(
-        state.phase === 'ATTACK' || state.phase === 'BLOCK_COMMIT',
-        'No es la fase de ataque.',
+        hidden?.type === 'defense',
+        'La defensa rival todavía no se comprometió.',
       )
       const side = state.possession
       const attacker = playerById(state, command.playerId)
       assert(attacker, 'Jugador inexistente.')
       assert(attacker.id === state.attackerId, 'Ese jugador no recibió el armado.')
       assert(attacker.side === side, 'El atacante debe ser del equipo en posesión.')
-      assert(state.tempo, 'No hay tempo definido.')
 
-      const defending = playersOf(state, otherSide(side))
       const check = isAttackAllowed({
         attacker,
         kind: command.kind,
-        tempo: state.tempo,
         target: command.target,
-        defending,
       })
       if (!check.ok) throw new EngineError(check.reason)
 
       const cost = ATTACK_AP_COST[command.kind]
-      assert(state.ap >= cost, 'No hay AP para ese ataque.')
-
+      assert(state.ap >= cost, 'No hay energía para ese ataque.')
       if (state.rallyAttacks >= MAX_RALLY_ATTACKS) {
-        const next = clone(state)
-        addLog(next, 'El rally se estira demasiado: se cierra el punto.', 'neutral')
-        return {
-          state: next,
-          events: awardPoint(next, otherSide(side), 'cap'),
-        }
+        return capRally(state, attacker)
       }
 
-      const resolution = evaluateAttack(
+      return applyDuel(
+        state,
         attacker,
-        state.setQuality,
         command.kind,
         command.target,
-        defending,
+        hidden.scheme,
+        cost,
       )
-      const next = clone(state)
-      next.ap -= cost
-      next.touches = 3
-      next.rallyAttacks += 1
+    }
 
-      const events: EngineEvent[] = [
-        {
-          type: 'ATTACK',
-          playerId: attacker.id,
-          kind: command.kind,
-          target: { ...command.target },
-          resolution,
-        },
-      ]
-
-      if (resolution.outcome === 'blocked') {
-        addLog(
-          next,
-          `${attacker.name} ataca y el bloqueo la devuelve. Punto rival.`,
-          'bad',
-        )
-        return {
-          state: next,
-          events: [...events, ...awardPoint(next, otherSide(side), 'block')],
-        }
-      }
-
-      if (resolution.outcome === 'point') {
-        addLog(
-          next,
-          `${attacker.name} ataca a la ${zoneLabel(command.target)}: ¡punto!`,
-          'good',
-        )
-        return {
-          state: next,
-          events: [...events, ...awardPoint(next, side, 'attack')],
-        }
-      }
-
-      const defender = playerById(next, resolution.defenderId)
-      assert(defender, 'El dig no tiene defensor.')
-      const digQuality = resolution.digQuality!
-      addLog(
-        next,
-        `${defender.name} defiende: dig ${qualityText(digQuality)}.`,
-        digQuality >= 2 ? 'good' : 'neutral',
+    case 'DEFEND': {
+      assert(state.phase === 'DEFEND', 'No es la fase defensiva.')
+      const hidden = state.hiddenChoice
+      assert(
+        hidden?.type === 'attack',
+        'El ataque rival todavía no se comprometió.',
       )
-      startPossession(
-        next,
-        otherSide(side),
-        {
-          cell: { ...defender.cell },
-          pressure: 'attack',
-          quality: digQuality,
-          lastTouchId: defender.id,
-        },
-        digQuality,
+      const attacker = playerById(state, state.attackerId)
+      assert(attacker, 'El atacante rival no existe.')
+      assert(
+        attacker.side === state.possession,
+        'El atacante debe ser del equipo en posesión.',
       )
-      if (digQuality === 3) {
-        next.ap = Math.min(
-          AP_PER_POSSESSION,
-          next.ap + PERFECT_PASS_AP_REFUND,
-        )
+      const plan = hidden.plan
+      const check = isAttackAllowed({
+        attacker,
+        kind: plan.kind,
+        target: plan.target,
+      })
+      if (!check.ok) throw new EngineError(check.reason)
+      if (state.rallyAttacks >= MAX_RALLY_ATTACKS) {
+        return capRally(state, attacker)
       }
-      return {
-        state: next,
-        events: [...events, { type: 'PHASE', phase: 'SET' }],
-      }
+
+      return applyDuel(
+        state,
+        attacker,
+        plan.kind,
+        plan.target,
+        command.scheme,
+        0,
+      )
     }
 
     default: {
@@ -573,9 +536,3 @@ export const legalReceivers = (state: GameState): Player[] =>
   playersOf(state, state.possession).filter((player) =>
     reaches(player.cell, state.ball.cell),
   )
-
-export const defendReach = (
-  state: GameState,
-  target: Cell,
-): { player: Player | null; value: number } =>
-  bestDefenderFor(playersOf(state, otherSide(state.possession)), target, false)

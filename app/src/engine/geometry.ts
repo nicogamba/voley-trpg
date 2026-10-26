@@ -35,7 +35,11 @@ export const orthogonalNeighborCells = (from: Cell): Cell[] => {
   return result
 }
 
-/** Alcance de recepción/defensa: la propia celda y las ortogonalmente adyacentes. */
+/**
+ * Alcance de recepción/defensa: la propia celda y las ortogonalmente
+ * adyacentes. El líbero compensa su alcance limitado como armador de
+ * emergencia (ver `setQuality`).
+ */
 export const reaches = (from: Cell, to: Cell): boolean =>
   from.side === to.side && orthogonalDistance(from, to) <= 1
 
