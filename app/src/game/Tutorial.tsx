@@ -7,6 +7,7 @@ type TitleProps = {
   onTutorial: () => void
   onToggleMuted: () => void
   onHelp: () => void
+  onCourt: () => void
 }
 
 const CourtMark = () => (
@@ -31,6 +32,7 @@ export const TitleScreen = ({
   onTutorial,
   onToggleMuted,
   onHelp,
+  onCourt,
 }: TitleProps) => (
   <div className="title-shell">
     <div className="title-card scanlines">
@@ -77,6 +79,13 @@ export const TitleScreen = ({
         </button>
         <button type="button" onClick={onHelp} className="pixel-btn ghost">
           CÓMO SE JUEGA
+        </button>
+        <button
+          type="button"
+          onClick={onCourt}
+          className="pixel-btn ghost prototype-btn"
+        >
+          CANCHA V2 · PROTOTIPO
         </button>
       </div>
     </div>

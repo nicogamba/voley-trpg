@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import Board from './game/Board'
 import CommandMenu from './game/CommandMenu'
 import DuelCutIn from './game/DuelCutIn'
+import CourtScreen from './court/CourtScreen'
 import { isPlayerTurn, useGame } from './game/store'
 import {
   Coach,
@@ -71,6 +72,7 @@ const App = () => {
 
   const [attackKind, setAttackKind] = useState<AttackKind | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [courtOpen, setCourtOpen] = useState(false)
 
   const playerTurn = isPlayerTurn(game)
   const tells = useMemo(() => tellsFor(game), [game])
@@ -175,6 +177,10 @@ const App = () => {
     }
   }
 
+  if (courtOpen) {
+    return <CourtScreen onBack={() => setCourtOpen(false)} />
+  }
+
   if (screen === 'title') {
     return (
       <>
@@ -190,6 +196,7 @@ const App = () => {
           }}
           onToggleMuted={toggleMuted}
           onHelp={() => setHelpOpen(true)}
+          onCourt={() => setCourtOpen(true)}
         />
         {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       </>
