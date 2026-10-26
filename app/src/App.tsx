@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Board from './game/Board'
 import CommandMenu from './game/CommandMenu'
 import DuelCutIn from './game/DuelCutIn'
@@ -19,7 +19,7 @@ import {
   SCHEME_LABEL,
   tellsFor,
 } from './engine'
-import type { AttackKind, Cell, Command, GameState, Side } from './engine'
+import type { AttackKind, Cell, Command, GameState } from './engine'
 
 const PHASE_LABEL: Record<GameState['phase'], string> = {
   SERVE: 'SAQUE',
@@ -31,14 +31,15 @@ const PHASE_LABEL: Record<GameState['phase'], string> = {
 }
 
 const statusText = (game: GameState): string => {
-  const mine = (side: Side) => (side === game.playerSide ? 'Tu' : 'Rival')
   switch (game.phase) {
     case 'SERVE':
       return game.server === game.playerSide ? 'Tu saque' : 'Saque rival'
     case 'RECEIVE':
-      return `${mine(game.possession)} recepción`
+      return game.possession === game.playerSide
+        ? 'Tu recepción'
+        : 'Recepción rival'
     case 'SET':
-      return `${mine(game.possession)} armado`
+      return game.possession === game.playerSide ? 'Tu armado' : 'Armado rival'
     case 'ATTACK':
       return 'Tu jugada'
     case 'DEFEND':
@@ -70,8 +71,6 @@ const App = () => {
 
   const [attackKind, setAttackKind] = useState<AttackKind | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [aiPaused, setAiPaused] = useState(false)
-  const holdTimer = useRef<number | null>(null)
 
   const playerTurn = isPlayerTurn(game)
   const tells = useMemo(() => tellsFor(game), [game])
@@ -112,35 +111,16 @@ const App = () => {
     }
   }, [game.players, game.playerSide, lastDuel])
 
-  const closeDuel = () => {
-    dismissDuel()
-    setAiPaused(true)
-    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current)
-    holdTimer.current = window.setTimeout(() => setAiPaused(false), 900)
+  const closeDuel = () => dismissDuel()
+
+  const aiLock = useRef(0)
+  /** Un toque por turno rival, sin dobles avances accidentales. */
+  const continueAi = () => {
+    const now = Date.now()
+    if (now - aiLock.current < 250) return
+    aiLock.current = now
+    aiStep()
   }
-
-  useEffect(
-    () => () => {
-      if (holdTimer.current !== null) window.clearTimeout(holdTimer.current)
-    },
-    [],
-  )
-
-  useEffect(() => {
-    if (
-      screen !== 'game' ||
-      playerTurn ||
-      tutorialDone ||
-      helpOpen ||
-      duel ||
-      aiPaused ||
-      game.phase === 'MATCH_END'
-    ) {
-      return
-    }
-    const timer = window.setTimeout(() => aiStep(), 540)
-    return () => window.clearTimeout(timer)
-  }, [game, playerTurn, aiStep, screen, tutorialDone, helpOpen, duel, aiPaused])
 
   const act = (command: Command) => {
     dispatch(command, 'player')
@@ -314,15 +294,17 @@ const App = () => {
       <CommandMenu
         game={game}
         tells={tells}
+        playerTurn={playerTurn}
         attackKind={attackKind}
         onAttackKind={setAttackKind}
         onCommand={act}
+        onContinue={continueAi}
         onRestart={restart}
       />
 
       {tutorial && !tutorialDone ? (
-        <Coach game={game} onSkip={skipTutorial} />
-      ) : (
+        <Coach game={game} playerTurn={playerTurn} onSkip={skipTutorial} />
+      ) : playerTurn ? (
         <footer className={`log-line ${lastPlay && !duel ? 'has-last-play' : ''}`}>
           {lastPlay && !duel && (
             <button
@@ -355,7 +337,7 @@ const App = () => {
             <p className="log-entry">Un set a 7. Vos sacás primero.</p>
           )}
         </footer>
-      )}
+      ) : null}
 
       {duel && (
         <DuelCutIn

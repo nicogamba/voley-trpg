@@ -178,11 +178,29 @@ const HINTS: Partial<Record<Phase, { title: string; body: string }>> = {
 
 type CoachProps = {
   game: GameState
+  playerTurn: boolean
   onSkip: () => void
 }
 
-export const Coach = ({ game, onSkip }: CoachProps) => {
-  const hint = HINTS[game.phase]
+const RIVAL_HINTS: Partial<Record<Phase, { title: string; body: string }>> = {
+  SERVE: {
+    title: 'Saque rival',
+    body: 'El rival saca. Leé el cartel y tocá CONTINUAR cuando estés listo.',
+  },
+  RECEIVE: {
+    title: 'Recepción rival',
+    body: 'El rival recibe tu saque. Tocá CONTINUAR para ver qué arma.',
+  },
+  SET: {
+    title: 'Armado rival',
+    body: 'El rival elige atacante. Tocá CONTINUAR cuando lo hayas leído.',
+  },
+}
+
+export const Coach = ({ game, playerTurn, onSkip }: CoachProps) => {
+  const hint = playerTurn
+    ? HINTS[game.phase]
+    : (RIVAL_HINTS[game.phase] ?? HINTS[game.phase])
   if (!hint) return null
   const rally = Math.min(game.rallyNumber, 2)
   return (

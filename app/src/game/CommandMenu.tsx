@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ATTACK_AP_COST,
   ATTACK_LABEL,
@@ -30,9 +30,11 @@ import type { Tell } from '../engine'
 type Props = {
   game: GameState
   tells: Tell[]
+  playerTurn: boolean
   attackKind: AttackKind | null
   onAttackKind: (kind: AttackKind | null) => void
   onCommand: (command: Command) => void
+  onContinue: () => void
   onRestart: () => void
 }
 
@@ -80,12 +82,72 @@ const TellBox = ({ tells }: { tells: Tell[] }) => (
   </div>
 )
 
+const RIVAL_PHASE: Partial<
+  Record<GameState['phase'], { label: string; copy: string }>
+> = {
+  SERVE: {
+    label: 'SAQUE RIVAL',
+    copy: 'El rival prepara el saque. Mirá dónde va antes de recibir.',
+  },
+  RECEIVE: {
+    label: 'RECEPCIÓN RIVAL',
+    copy: 'El rival acomoda la recepción. Su pase define el armado.',
+  },
+  SET: {
+    label: 'ARMADO RIVAL',
+    copy: 'El rival elige a su atacante. Después te toca defender.',
+  },
+}
+
+const RivalTurn = ({
+  game,
+  onContinue,
+}: {
+  game: GameState
+  onContinue: () => void
+}) => {
+  const info = RIVAL_PHASE[game.phase] ?? {
+    label: 'TURNO RIVAL',
+    copy: 'El rival juega su carta.',
+  }
+  const narration = game.log.at(-1)?.text
+  /** Evita que un doble toque se lleve dos carteles sin leerlos. */
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setReady(true), 350)
+    return () => window.clearTimeout(timer)
+  }, [])
+  return (
+    <section className="command-panel rival-turn">
+      <PhaseBar step="RIVAL" label={info.label} />
+      <p className="command-copy">{info.copy}</p>
+      {narration && (
+        <div className="beat-line">
+          <span className="beat-tag">ÚLTIMO MOVIMIENTO</span>
+          <p>{narration}</p>
+        </div>
+      )}
+      <button
+        type="button"
+        className="pixel-btn primary rival-continue"
+        disabled={!ready}
+        onClick={onContinue}
+      >
+        CONTINUAR ▶
+      </button>
+      <p className="command-hint">Leé el cartel y tocá CONTINUAR.</p>
+    </section>
+  )
+}
+
 const CommandMenu = ({
   game,
   tells,
+  playerTurn,
   attackKind,
   onAttackKind,
   onCommand,
+  onContinue,
   onRestart,
 }: Props) => {
   const team = useMemo(() => playersOf(game, game.playerSide), [game])
@@ -177,15 +239,17 @@ const CommandMenu = ({
     )
   }
 
+  if (!playerTurn) {
+    return (
+      <RivalTurn
+        key={`${game.phase}-${game.log.length}`}
+        game={game}
+        onContinue={onContinue}
+      />
+    )
+  }
+
   if (game.phase === 'SERVE') {
-    if (game.server !== game.playerSide) {
-      return (
-        <section className="command-panel">
-          <PhaseBar step="SAQUE" label="RIVAL" />
-          <div className="waiting-box blink">EL RIVAL PREPARA EL SAQUE…</div>
-        </section>
-      )
-    }
     return (
       <section className="command-panel">
         <PhaseBar step="1/3" label="TU SAQUE" />
@@ -380,8 +444,8 @@ const CommandMenu = ({
 
   return (
     <section className="command-panel">
-      <PhaseBar step="…" label="RIVAL" />
-      <div className="waiting-box blink">EL RIVAL ESTÁ JUGANDO…</div>
+      <PhaseBar step="…" label="ESPERA" />
+      <div className="waiting-box">EL TABLERO SE ACOMODA…</div>
     </section>
   )
 }

@@ -70,6 +70,10 @@ button:disabled {
   gap: 7px;
 }
 
+.game-shell > .command-panel {
+  margin-top: auto;
+}
+
 .hud {
   position: relative;
   background: var(--ink-2);
@@ -493,6 +497,41 @@ button:disabled {
 .command-hint {
   font-size: 9px;
   color: #5b5342;
+}
+
+/* ---------- Rival turn ---------- */
+
+.rival-turn {
+  background: #f2e6c6;
+}
+
+.beat-line {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 7px;
+  background: #131722;
+  border-left: 3px solid var(--gold);
+}
+
+.beat-tag {
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+}
+
+.beat-line p {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.35;
+  color: #e9eefc;
+}
+
+.rival-continue {
+  min-height: 42px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
 }
 
 .command-list {

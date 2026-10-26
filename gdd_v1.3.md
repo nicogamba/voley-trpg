@@ -369,7 +369,18 @@ Los esquemas de red son Muro y Bloqueo abierto. Los demás siempre hacen dig.
 - El tablero solo resalta lo que se puede tocar.
 - El cut-in ocupa toda la pantalla y avanza en dos tiempos con botón.
 
-### 13.2. Cut-in
+### 13.2. Turno rival
+
+- Cada acción de la IA es un turno con botón **CONTINUAR**: saque, recepción y
+  armado rival no avanzan solos.
+- El cartel explica qué está por hacer el rival y muestra el **último
+  movimiento** para mantener el hilo del rally.
+- Mientras juega el rival se oculta el pie de log: la narración ya está en el
+  cartel y no se duplica.
+- El botón se arma a los 350 ms: un doble toque no puede saltear el cartel.
+- En el tutorial, el coach avisa “tocá CONTINUAR cuando estés listo”.
+
+### 13.3. Cut-in
 
 - Fondo oscuro con retratos pixelados grandes, `VS` y nombres.
 - **Dos tiempos:** primero la jugada (ataque, zona y esquema), después el
@@ -383,7 +394,7 @@ Los esquemas de red son Muro y Bloqueo abierto. Los demás siempre hacen dig.
 - La franja **ÚLTIMA** del pie guarda el último duelo y lo reabre en modo
   repetición, incluso en pantallas donde el log está oculto.
 
-### 13.3. Claridad
+### 13.4. Claridad
 
 - Sin `A/B/D`, sin porcentajes y sin nombres de esquema antes de elegir.
 - El tutorial enseña el loop en 2 rallies.
@@ -502,6 +513,7 @@ por vez y volver a simular.
 | 2026-10-26 | Finta solo al fondo | Diferenciarla de Colocación y evitar el spam |
 | 2026-10-26 | `SCHEME_BASE` 3 y bonus de ataque 2 | Bajar los puntos automáticos y dar lugar al dig |
 | 2026-10-26 | Cut-in en dos tiempos con botón y franja ÚLTIMA | El resultado se cerraba con el mismo toque y no se alcanzaba a leer |
+| 2026-10-26 | Turno rival con CONTINUAR | Los carteles de recepción y armado pasaban en 540 ms y no se podían leer |
 
 ---
 

@@ -112,10 +112,66 @@ describe('UI', () => {
 
   it('muestra la pista del tutorial del saque', () => {
     const game = createMatch({ server: 'home' })
-    const html = renderToString(<Coach game={game} onSkip={noop} />)
+    const html = renderToString(
+      <Coach game={game} playerTurn onSkip={noop} />,
+    )
     const text = html.replace(/<!-- -->/g, '')
     expect(text).toContain('TUTORIAL · RALLY 1 DE 2')
     expect(text).toContain('Tocá una zona del campo rival')
+  })
+
+  it('la pista del tutorial avisa cuando juega el rival', () => {
+    const game = createMatch({ server: 'away' })
+    const html = renderToString(
+      <Coach game={game} playerTurn={false} onSkip={noop} />,
+    )
+    const text = html.replace(/<!-- -->/g, '')
+    expect(text).toContain('Saque rival')
+    expect(text).toContain('tocá CONTINUAR')
+  })
+
+  it('el turno rival pide CONTINUAR y muestra el último movimiento', () => {
+    const game = run(createMatch({ server: 'home' }), {
+      type: 'SERVE',
+      target: cell('away', 1, 1),
+    })
+    const html = renderToString(
+      <CommandMenu
+        game={game}
+        tells={[]}
+        playerTurn={false}
+        attackKind={null}
+        onAttackKind={noop}
+        onCommand={noop}
+        onContinue={noop}
+        onRestart={noop}
+      />,
+    )
+    const text = html.replace(/<!-- -->/g, '')
+    expect(text).toContain('RECEPCIÓN RIVAL')
+    expect(text).toContain('ÚLTIMO MOVIMIENTO')
+    expect(text).toContain('CONTINUAR')
+    expect(text).toContain('Leé el cartel y tocá CONTINUAR')
+    // El botón se arma recién a los 350 ms para que un doble toque no saltee el cartel.
+    expect(text).toMatch(/rival-continue"[^>]*disabled/)
+  })
+
+  it('el saque rival también espera tu toque', () => {
+    const game = createMatch({ server: 'away' })
+    const html = renderToString(
+      <CommandMenu
+        game={game}
+        tells={[]}
+        playerTurn={false}
+        attackKind={null}
+        onAttackKind={noop}
+        onCommand={noop}
+        onContinue={noop}
+        onRestart={noop}
+      />,
+    )
+    expect(html).toContain('SAQUE RIVAL')
+    expect(html).not.toContain('EL RIVAL PREPARA EL SAQUE')
   })
 
   it('la ventana de ataque muestra pistas pero no la defensa oculta', () => {
@@ -124,9 +180,11 @@ describe('UI', () => {
       <CommandMenu
         game={game}
         tells={tellsFor(game)}
+        playerTurn
         attackKind={null}
         onAttackKind={noop}
         onCommand={noop}
+        onContinue={noop}
         onRestart={noop}
       />,
     )
@@ -144,9 +202,11 @@ describe('UI', () => {
       <CommandMenu
         game={game}
         tells={tellsFor(game)}
+        playerTurn
         attackKind={null}
         onAttackKind={noop}
         onCommand={noop}
+        onContinue={noop}
         onRestart={noop}
       />,
     )
