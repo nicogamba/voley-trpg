@@ -105,7 +105,7 @@ export const DEMO_RALLY: BeatSpec[] = [
     ball: {
       to: cell('away', 2, 2),
       arc: 52,
-      zFrom: 26,
+      zFrom: 46,
       zTo: 22,
       duration: 620,
       delay: 240,

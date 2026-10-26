@@ -10,6 +10,8 @@ import {
 import { DEMO_PLAYERS, DEMO_RALLY, INITIAL_BALL } from '../src/court/demo'
 import { cell, cellCenter, reaches } from '../src/court/geometry'
 
+import type { BeatSpec } from '../src/court/types'
+
 const timeline = buildTimeline(DEMO_PLAYERS, DEMO_RALLY, INITIAL_BALL)
 
 describe('geometría de la cancha v2', () => {
@@ -93,6 +95,65 @@ describe('coreografía del rally demo', () => {
     expect(after.x).toBeCloseTo(blockCell.x)
     expect(after.y).toBeCloseTo(blockCell.y)
   })
+
+  it('anima un movimiento suelto y lleva la pelota con el sacador', () => {
+    const molina = DEMO_PLAYERS.find((player) => player.name === 'MOLINA')!
+    const target = cell('home', 1, 3)
+    const move: BeatSpec[] = [
+      {
+        kind: 'move',
+        duration: 320,
+        caption: 'MUEVE · MOLINA',
+        moves: [
+          {
+            playerId: molina.id,
+            to: target,
+            duration: 300,
+            pose: 'run',
+          },
+        ],
+        ball: {
+          to: target,
+          arc: 10,
+          zFrom: 46,
+          zTo: 46,
+          duration: 300,
+        },
+      },
+    ]
+    const moveTimeline = buildTimeline(DEMO_PLAYERS, move, molina.cell)
+    const origin = cellCenter(molina.cell)
+    const destination = cellCenter(target)
+
+    const start = samplePlayer(moveTimeline, molina.id, 0)
+    const middle = samplePlayer(moveTimeline, molina.id, 150)
+    const end = samplePlayer(moveTimeline, molina.id, 320)
+
+    expect(start.x).toBeCloseTo(origin.x)
+    expect(middle.pose).toBe('run')
+    expect(middle.moving).toBe(true)
+    expect(end.x).toBeCloseTo(destination.x)
+    expect(end.pose).toBe('idle')
+
+    const ballEnd = sampleBall(moveTimeline, 320)
+    expect(ballEnd.groundX).toBeCloseTo(destination.x)
+    expect(ballEnd.groundY).toBeCloseTo(destination.y)
+    expect(ballEnd.z).toBeCloseTo(46)
+  })
+
+  it('deja una cancha quieta cuando el guion está vacío', () => {
+    const still = buildTimeline(DEMO_PLAYERS, [], INITIAL_BALL)
+    expect(still.total).toBe(0)
+    expect(still.beats).toHaveLength(0)
+    expect(still.balls).toHaveLength(0)
+    expect(beatAt(still, 0)).toBeNull()
+
+    const molina = DEMO_PLAYERS.find((player) => player.name === 'MOLINA')!
+    const sample = samplePlayer(still, molina.id, 500)
+    expect(sample.pose).toBe('idle')
+    expect(sample.x).toBeCloseTo(cellCenter(molina.cell).x)
+    expect(sampleBall(still, 500).z).toBe(46)
+  })
 })
 
 describe('pantalla de cancha v2', () => {
@@ -102,6 +163,7 @@ describe('pantalla de cancha v2', () => {
     expect(html).toContain('BRA')
     expect(html).toContain('SAQUE · MOLINA')
     expect(html).toContain('REPETIR RALLY')
+    expect(html).toContain('ORDENAR')
     expect(html).toContain('VOLVER')
     expect(html).toContain('court-canvas')
   })

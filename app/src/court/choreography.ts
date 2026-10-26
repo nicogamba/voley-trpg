@@ -83,13 +83,13 @@ export const buildTimeline = (
   const timeline: Timeline = {
     initialPlayers,
     initialBall: cellCenter(initialBallCell),
-    initialBallZ: 22,
+    initialBallZ: 46,
     players: {},
     balls: [],
     beats: [],
     total: 0,
     lastBall: cellCenter(initialBallCell),
-    lastBallZ: 22,
+    lastBallZ: 46,
   }
 
   let cursor = 0

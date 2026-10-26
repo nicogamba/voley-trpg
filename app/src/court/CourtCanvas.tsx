@@ -301,6 +301,26 @@ const drawPlayer = (
   ctx.fillText(CLASS_LETTER[player.classId], x, badge + 5.5)
 }
 
+const drawName = (
+  ctx: CanvasRenderingContext2D,
+  player: CourtPlayer,
+  x: number,
+  groundY: number,
+  active: boolean,
+) => {
+  ctx.font = '700 7px "Courier New", monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+  ctx.fillText(player.name, x + 1, groundY + 13)
+  ctx.fillStyle = active
+    ? '#ffd166'
+    : player.side === 'home'
+      ? 'rgba(185, 200, 234, 0.9)'
+      : 'rgba(231, 185, 194, 0.9)'
+  ctx.fillText(player.name, x, groundY + 12)
+}
+
 const drawImpact = (
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -349,6 +369,10 @@ export const CourtCanvas = ({
     let pointFired = false
     let ended = false
     const started = performance.now()
+    const animated = timeline.total > 0
+    const held = timeline.balls.length === 0
+    const tail =
+      script.length === 1 && script[0]?.kind === 'move' ? 100 : 350
 
     const frame = (now: number) => {
       const t = Math.max(0, now - started)
@@ -390,6 +414,17 @@ export const CourtCanvas = ({
         )
       }
 
+      // Nombres al piso: no se mueven con el salto.
+      for (const { player, sample } of samples) {
+        drawName(
+          ctx,
+          player,
+          sample.x,
+          sample.groundY,
+          beat?.caption.includes(player.name) ?? false,
+        )
+      }
+
       // Rastro de la pelota.
       if (ball.segment) {
         for (let index = 1; index <= 4; index += 1) {
@@ -404,7 +439,13 @@ export const CourtCanvas = ({
         }
       }
 
-      drawBall(ctx, ball.groundX, ball.groundY, ball.z, t)
+      drawBall(
+        ctx,
+        ball.groundX + (held ? 11 : 0),
+        ball.groundY,
+        ball.z,
+        t,
+      )
 
       if (
         ball.segment?.kind === 'spike' &&
@@ -453,7 +494,9 @@ export const CourtCanvas = ({
         callbacks.current.onPoint?.(beat.point)
       }
 
-      if (t < timeline.total + 350) {
+      if (!animated) return
+
+      if (t < timeline.total + tail) {
         raf = requestAnimationFrame(frame)
       } else if (!ended) {
         ended = true
@@ -463,7 +506,7 @@ export const CourtCanvas = ({
 
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [timeline, players])
+  }, [timeline, players, script])
 
   return (
     <canvas
