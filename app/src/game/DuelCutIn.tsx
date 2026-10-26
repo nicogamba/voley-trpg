@@ -13,10 +13,17 @@ import { playSfx } from './sound'
 type Props = {
   game: GameState
   duel: DuelReveal
+  /** Una repetición arranca directamente en el resultado. */
+  startAtResult?: boolean
   onClose: () => void
 }
 
-const DuelCutIn = ({ game, duel, onClose }: Props) => {
+/** Tiempo mínimo que el resultado queda en pantalla antes de poder cerrar. */
+const RESULT_LOCK_MS = 700
+/** Velocidad de tipeo: legible, y siempre se puede completar con un toque. */
+const TYPE_MS = 24
+
+const DuelCutIn = ({ game, duel, startAtResult = false, onClose }: Props) => {
   const event = duel.event
   const attacker = game.players.find((player) => player.id === event.playerId)
   const defender = game.players.find(
@@ -26,7 +33,7 @@ const DuelCutIn = ({ game, duel, onClose }: Props) => {
   const zone = zoneOf(event.target.row, event.target.col)
   const resolution = event.resolution
 
-  const lines = useMemo(() => {
+  const { playText, outcomeText } = useMemo(() => {
     const attackerName = attacker?.name ?? 'Atacante'
     const defenderName = defender?.name ?? 'Defensa'
     const first = `${attackerName} ataca con ${ATTACK_LABEL[event.kind]} a la zona ${zone}.`
@@ -34,31 +41,25 @@ const DuelCutIn = ({ game, duel, onClose }: Props) => {
       ? `El rival responde: ${SCHEME_LABEL[event.scheme]}.`
       : `Vos respondés: ${SCHEME_LABEL[event.scheme]}.`
 
+    let outcome: string
     if (resolution.outcome === 'point') {
-      return [
-        first,
-        second,
-        playerAttacked
-          ? 'El ataque encuentra el hueco: ¡punto tuyo!'
-          : 'El ataque encuentra el hueco: punto rival.',
-      ]
-    }
-    if (resolution.outcome === 'blocked') {
-      return [
-        first,
-        second,
-        playerAttacked
-          ? 'La defensa cierra el ataque: punto rival.'
-          : 'La defensa cierra el ataque: ¡punto tuyo!',
-      ]
-    }
-    return [
-      first,
-      second,
-      `${defenderName} salva la bola: pase ${qualityLabel(
+      outcome = playerAttacked
+        ? 'El ataque encuentra el hueco: ¡punto tuyo!'
+        : 'El ataque encuentra el hueco: punto rival.'
+    } else if (resolution.outcome === 'blocked') {
+      outcome = playerAttacked
+        ? 'La defensa cierra el ataque: punto rival.'
+        : 'La defensa cierra el ataque: ¡punto tuyo!'
+    } else {
+      outcome = `${defenderName} salva la bola: pase ${qualityLabel(
         resolution.digQuality ?? 0,
-      )}.`,
-    ]
+      )}.`
+    }
+
+    return {
+      playText: [first, second].join('\n'),
+      outcomeText: outcome,
+    }
   }, [
     attacker?.name,
     defender?.name,
@@ -70,29 +71,60 @@ const DuelCutIn = ({ game, duel, onClose }: Props) => {
     zone,
   ])
 
-  const text = lines.join('\n')
-  const [chars, setChars] = useState(0)
+  const [beat, setBeat] = useState<'play' | 'result'>(
+    startAtResult ? 'result' : 'play',
+  )
+  const [chars, setChars] = useState(startAtResult ? playText.length : 0)
+  const [resultReady, setResultReady] = useState(false)
+  const complete = chars >= playText.length
 
   useEffect(() => {
     playSfx('reveal')
+  }, [])
+
+  useEffect(() => {
+    if (beat !== 'play') return
     const timer = window.setInterval(() => {
       setChars((current) => {
-        if (current >= text.length) {
+        if (current >= playText.length) {
           window.clearInterval(timer)
           return current
         }
-        return Math.min(text.length, current + 2)
+        return Math.min(playText.length, current + 1)
       })
-    }, 18)
+    }, TYPE_MS)
     return () => window.clearInterval(timer)
-  }, [text])
+  }, [beat, playText])
 
-  const complete = chars >= text.length
-  const advance = () => {
+  useEffect(() => {
+    if (beat !== 'result') return
+    const timer = window.setTimeout(
+      () => setResultReady(true),
+      RESULT_LOCK_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [beat])
+
+  const goToResult = () => {
+    if (beat !== 'play') return
+    playSfx('click')
+    setResultReady(false)
+    setBeat('result')
+  }
+
+  /** Tocar el fondo solo completa el tipeo o pasa al resultado. Nunca cierra. */
+  const tapBackdrop = () => {
+    if (beat !== 'play') return
     if (!complete) {
-      setChars(text.length)
+      setChars(playText.length)
       return
     }
+    goToResult()
+  }
+
+  const finish = () => {
+    if (beat !== 'result' || !resultReady) return
+    playSfx('click')
     onClose()
   }
 
@@ -116,17 +148,11 @@ const DuelCutIn = ({ game, duel, onClose }: Props) => {
   })()
 
   return (
-    <div
-      className="cutin-overlay scanlines"
-      role="button"
-      tabIndex={0}
-      onClick={advance}
-      onKeyDown={(eventKey) => {
-        if (eventKey.key === 'Enter' || eventKey.key === ' ') advance()
-      }}
-    >
+    <div className="cutin-overlay scanlines" onClick={tapBackdrop}>
       <div className="cutin-top">
-        <span className="cutin-kicker">DUELO OCULTO</span>
+        <span className="cutin-kicker">
+          {startAtResult ? 'REPETICIÓN' : 'DUELO OCULTO'}
+        </span>
         <span className="cutin-score">
           {duel.score.home} — {duel.score.away}
         </span>
@@ -165,19 +191,44 @@ const DuelCutIn = ({ game, duel, onClose }: Props) => {
         <p className="cutin-scene">
           Zona {zone} · {SCHEME_LABEL[event.scheme]} vs {ATTACK_LABEL[event.kind]}
         </p>
-        <p className="cutin-dialogue">{text.slice(0, chars)}</p>
-        {complete && (
-          <div className={`cutin-stamp ${stamp.tone}`}>{stamp.text}</div>
+        {beat === 'play' ? (
+          <p className="cutin-dialogue">{playText.slice(0, chars)}</p>
+        ) : (
+          <>
+            <p className="cutin-dialogue">{outcomeText}</p>
+            <div className={`cutin-stamp ${stamp.tone}`}>{stamp.text}</div>
+          </>
         )}
       </div>
 
       <div className="cutin-footer">
-        {complete ? (
-          <span className="cutin-advance">
-            <span className="blink">▶</span> TOCÁ PARA SEGUIR
-          </span>
+        {beat === 'play' ? (
+          complete ? (
+            <button
+              type="button"
+              className="pixel-btn primary cutin-next"
+              onClick={(clickEvent) => {
+                clickEvent.stopPropagation()
+                goToResult()
+              }}
+            >
+              VER EL RESULTADO ▶
+            </button>
+          ) : (
+            <span className="typing">TOCÁ PARA COMPLETAR…</span>
+          )
         ) : (
-          <span className="typing">...</span>
+          <button
+            type="button"
+            className="pixel-btn primary cutin-next"
+            disabled={!resultReady}
+            onClick={(clickEvent) => {
+              clickEvent.stopPropagation()
+              finish()
+            }}
+          >
+            {resultReady ? 'CONTINUAR ▶' : 'LEÉ EL RESULTADO…'}
+          </button>
         )}
       </div>
     </div>

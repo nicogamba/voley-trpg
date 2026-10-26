@@ -162,7 +162,7 @@ describe('UI', () => {
     expect(html).not.toContain('PUNTO')
   })
 
-  it('el cut-in revela ataque, esquema y resultado', () => {
+  it('el cut-in empieza en la jugada y todavía no revela el resultado', () => {
     const before = withScheme(toHomeAttack(), 'spread')
     const result = reduce(before, {
       type: 'ATTACK',
@@ -192,5 +192,37 @@ describe('UI', () => {
     expect(text).toContain('Potencia')
     expect(text).toContain('Bloqueo abierto')
     expect(text).toContain('Central')
+    expect(text).toContain('TOCÁ PARA COMPLETAR')
+    expect(text).not.toContain('¡PUNTO!')
+    expect(text).not.toContain('El ataque encuentra el hueco')
+  })
+
+  it('la repetición del cut-in arranca en el resultado', () => {
+    const before = withScheme(toHomeAttack(), 'spread')
+    const result = reduce(before, {
+      type: 'ATTACK',
+      playerId: 'home-middle',
+      kind: 'power',
+      target: cell('away', 0, 0),
+    })
+    const event = result.events.find((item) => item.type === 'ATTACK')
+    if (event?.type !== 'ATTACK') throw new Error('Sin ataque')
+    const html = renderToString(
+      <DuelCutIn
+        game={before}
+        duel={{
+          event,
+          rallyNumber: before.rallyNumber,
+          score: result.state.score,
+        }}
+        startAtResult
+        onClose={noop}
+      />,
+    )
+    const text = html.replace(/<!-- -->/g, '')
+    expect(text).toContain('REPETICIÓN')
+    expect(text).toContain('¡PUNTO!')
+    expect(text).toContain('El ataque encuentra el hueco: ¡punto tuyo!')
+    expect(text).toContain('LEÉ EL RESULTADO')
   })
 })

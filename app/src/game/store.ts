@@ -41,6 +41,10 @@ type GameStore = {
   muted: boolean
   lastEvent: EngineEvent | null
   duel: DuelReveal | null
+  /** Se conserva después de cerrar el cut-in para poder releerlo. */
+  lastDuel: DuelReveal | null
+  /** El cut-in abierto es una repetición y arranca en el resultado. */
+  duelReplay: boolean
   toast: string | null
   aiRng: () => number
   startGame: (options?: { tutorial?: boolean }) => void
@@ -53,6 +57,7 @@ type GameStore = {
   reset: () => void
   clearToast: () => void
   dismissDuel: () => void
+  reopenDuel: () => void
 }
 
 const newGame = () =>
@@ -102,6 +107,8 @@ export const useGame = create<GameStore>((set, get) => ({
   muted: false,
   lastEvent: null,
   duel: null,
+  lastDuel: null,
+  duelReplay: false,
   toast: null,
   aiRng: mulberry32(20261026),
   startGame: (options = {}) => {
@@ -113,6 +120,8 @@ export const useGame = create<GameStore>((set, get) => ({
       tutorial: options.tutorial ?? false,
       lastEvent: null,
       duel: null,
+      lastDuel: null,
+      duelReplay: false,
       toast: null,
       aiRng: mulberry32(Date.now() % 1_000_000),
     })
@@ -124,6 +133,8 @@ export const useGame = create<GameStore>((set, get) => ({
       tutorial: false,
       lastEvent: null,
       duel: null,
+      lastDuel: null,
+      duelReplay: false,
       toast: null,
       aiRng: mulberry32(Date.now() % 1_000_000),
     })
@@ -140,6 +151,8 @@ export const useGame = create<GameStore>((set, get) => ({
       tutorial: false,
       lastEvent: null,
       duel: null,
+      lastDuel: null,
+      duelReplay: false,
       toast: null,
     })
   },
@@ -157,17 +170,19 @@ export const useGame = create<GameStore>((set, get) => ({
       const attack = result.events.find(
         (event): event is AttackEvent => event.type === 'ATTACK',
       )
+      const reveal = attack
+        ? {
+            event: attack,
+            rallyNumber: game.rallyNumber,
+            score: { ...next.score },
+          }
+        : null
       feedback(result.events)
       set({
         game: next,
         lastEvent: result.events[result.events.length - 1] ?? null,
-        duel: attack
-          ? {
-              event: attack,
-              rallyNumber: game.rallyNumber,
-              score: { ...next.score },
-            }
-          : null,
+        duel: reveal,
+        ...(reveal ? { lastDuel: reveal, duelReplay: false } : {}),
         toast: null,
       })
     } catch (error) {
@@ -201,10 +216,23 @@ export const useGame = create<GameStore>((set, get) => ({
       game: newGame(),
       lastEvent: null,
       duel: null,
+      lastDuel: null,
+      duelReplay: false,
       toast: null,
       aiRng: mulberry32(Date.now() % 1_000_000),
     })
   },
   clearToast: () => set({ toast: null }),
-  dismissDuel: () => set({ duel: null }),
+  dismissDuel: () =>
+    set((state) => ({
+      duel: null,
+      lastDuel: state.lastDuel ?? state.duel,
+      duelReplay: false,
+    })),
+  reopenDuel: () => {
+    const { lastDuel } = get()
+    if (!lastDuel) return
+    playSfx('click')
+    set({ duel: lastDuel, duelReplay: true })
+  },
 }))

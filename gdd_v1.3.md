@@ -367,14 +367,21 @@ Los esquemas de red son Muro y Bloqueo abierto. Los demás siempre hacen dig.
 - Ancho máximo 430 px, centrado. Sin scroll en 360×640.
 - Una acción por fase. Los botones son grandes y con verbo claro.
 - El tablero solo resalta lo que se puede tocar.
-- El cut-in ocupa toda la pantalla y se avanza tocando.
+- El cut-in ocupa toda la pantalla y avanza en dos tiempos con botón.
 
 ### 13.2. Cut-in
 
 - Fondo oscuro con retratos pixelados grandes, `VS` y nombres.
-- Texto tipo typewriter con el relato del duelo.
-- Sello de resultado: `¡PUNTO!`, `BLOQUEO`, `DIG Q2`.
+- **Dos tiempos:** primero la jugada (ataque, zona y esquema), después el
+  resultado. Cada tiempo pide una acción explícita.
+- El primer toque completa el tipeo; el botón **VER EL RESULTADO** pasa al
+  desenlace y **CONTINUAR** cierra. Tocar el fondo nunca cierra el cut-in.
+- El resultado queda bloqueado 700 ms antes de habilitar **CONTINUAR**.
+- Sello de resultado: `¡PUNTO!`, `BLOQUEO`, `DIG Q2`, con color según quién
+  ganó el duelo.
 - Marcador y número de rally congelados al momento del duelo.
+- La franja **ÚLTIMA** del pie guarda el último duelo y lo reabre en modo
+  repetición, incluso en pantallas donde el log está oculto.
 
 ### 13.3. Claridad
 
@@ -494,6 +501,7 @@ por vez y volver a simular.
 | 2026-10-26 | Rápido solo por el centro e ignora posición | Tenía que dejar de ser un ataque gratis sin costo |
 | 2026-10-26 | Finta solo al fondo | Diferenciarla de Colocación y evitar el spam |
 | 2026-10-26 | `SCHEME_BASE` 3 y bonus de ataque 2 | Bajar los puntos automáticos y dar lugar al dig |
+| 2026-10-26 | Cut-in en dos tiempos con botón y franja ÚLTIMA | El resultado se cerraba con el mismo toque y no se alcanzaba a leer |
 
 ---
 
@@ -503,5 +511,5 @@ por vez y volver a simular.
 - ¿El jugador defiende suficiente para aprender los esquemas?
 - ¿La pista de la zona rival es demasiada información?
 - ¿7 puntos alcanzan para que aparezca la lectura entre esquemas?
-- ¿El cut-in necesita un botón explícito además del “tocá para seguir”?
+- ¿El cut-in necesita más variedad de texto por tipo de ataque?
 - ¿El tablero 3×2 se lee bien con 8 fichas en un celular chico?

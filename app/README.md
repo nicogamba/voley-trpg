@@ -8,7 +8,9 @@ rival y comprometerse antes de ver el resultado.
 
 - **v1.3 “Duelo oculto”**: motor reescrito, UI Tecmo, cut-in a pantalla completa
   y tutorial nuevo.
-- 63 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
+- **v1.3.1 “Claridad”**: cut-in en dos tiempos con botón explícito, resultado
+  bloqueado 700 ms y franja **ÚLTIMA** para releer la jugada.
+- 67 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
 - Balance simulado con 500 partidos IA vs IA (ver más abajo).
 - Pendiente: playtest con 5 personas y deploy en Vercel.
 
@@ -24,8 +26,9 @@ rival y comprometerse antes de ver el resultado.
    (Muro, Bloqueo abierto, Defensa profunda o Líbero atento). Si defendés, el
    rival ya eligió ataque y zona. Solo ves 1 o 2 pistas según tu Lectura.
 6. **Tu elección:** ataque + zona, o esquema defensivo. Después, cut-in.
-7. **Cut-in:** revela ataque, esquema y resultado: **punto**, **bloqueo** o
-   **dig**. Se avanza tocando la pantalla.
+7. **Cut-in:** primero ves la jugada (ataque, zona y esquema); después, con
+   **VER EL RESULTADO**, el desenlace: **punto**, **bloqueo** o **dig**. Se
+   cierra con **CONTINUAR** y la franja **ÚLTIMA** te deja releerlo.
 8. El ganador del rally saca el siguiente. A 7 puntos.
 
 No hay `undo`: cuando ves el cut-in, la jugada ya ocurrió.
@@ -68,7 +71,7 @@ npm run dev
 El servidor queda en `http://127.0.0.1:5173/` (o el siguiente puerto libre).
 
 ```bash
-npm test        # 63 tests: motor, comandos, store, simulación y render
+npm test        # 67 tests: motor, comandos, store, simulación y render
 npm run build   # tsc -b && vite build
 npm run lint    # oxlint
 npm run preview # sirve dist/

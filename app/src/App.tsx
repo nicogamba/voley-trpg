@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Board from './game/Board'
 import CommandMenu from './game/CommandMenu'
 import DuelCutIn from './game/DuelCutIn'
@@ -11,10 +11,12 @@ import {
 } from './game/Tutorial'
 import {
   AP_MAX,
+  ATTACK_LABEL,
   cellKey,
   cellsOfSide,
   isAttackAllowed,
   otherSide,
+  SCHEME_LABEL,
   tellsFor,
 } from './engine'
 import type { AttackKind, Cell, Command, GameState, Side } from './engine'
@@ -52,6 +54,8 @@ const App = () => {
   const tutorial = useGame((state) => state.tutorial)
   const muted = useGame((state) => state.muted)
   const duel = useGame((state) => state.duel)
+  const lastDuel = useGame((state) => state.lastDuel)
+  const duelReplay = useGame((state) => state.duelReplay)
   const toast = useGame((state) => state.toast)
   const dispatch = useGame((state) => state.dispatch)
   const aiStep = useGame((state) => state.aiStep)
@@ -62,9 +66,12 @@ const App = () => {
   const backToTitle = useGame((state) => state.backToTitle)
   const toggleMuted = useGame((state) => state.toggleMuted)
   const dismissDuel = useGame((state) => state.dismissDuel)
+  const reopenDuel = useGame((state) => state.reopenDuel)
 
   const [attackKind, setAttackKind] = useState<AttackKind | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [aiPaused, setAiPaused] = useState(false)
+  const holdTimer = useRef<number | null>(null)
 
   const playerTurn = isPlayerTurn(game)
   const tells = useMemo(() => tellsFor(game), [game])
@@ -74,6 +81,51 @@ const App = () => {
   const tutorialDone =
     tutorial && (game.rallyNumber > 2 || game.phase === 'MATCH_END')
 
+  const lastPlay = useMemo(() => {
+    if (!lastDuel) return null
+    const event = lastDuel.event
+    const resolution = event.resolution
+    const attackerSide = game.players.find(
+      (player) => player.id === event.playerId,
+    )?.side
+    const mine = attackerSide === game.playerSide
+    const result =
+      resolution.outcome === 'point'
+        ? `PUNTO ${mine ? 'TUYO' : 'RIVAL'}`
+        : resolution.outcome === 'blocked'
+          ? `BLOQUEO ${mine ? 'RIVAL' : 'TUYO'}`
+          : `DIG Q${resolution.digQuality ?? 0}`
+    const tone =
+      resolution.outcome === 'point'
+        ? mine
+          ? 'good'
+          : 'bad'
+        : resolution.outcome === 'blocked'
+          ? mine
+            ? 'bad'
+            : 'good'
+          : 'dig'
+    return {
+      matchup: `${SCHEME_LABEL[event.scheme]} vs ${ATTACK_LABEL[event.kind]}`,
+      result,
+      tone,
+    }
+  }, [game.players, game.playerSide, lastDuel])
+
+  const closeDuel = () => {
+    dismissDuel()
+    setAiPaused(true)
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current)
+    holdTimer.current = window.setTimeout(() => setAiPaused(false), 900)
+  }
+
+  useEffect(
+    () => () => {
+      if (holdTimer.current !== null) window.clearTimeout(holdTimer.current)
+    },
+    [],
+  )
+
   useEffect(() => {
     if (
       screen !== 'game' ||
@@ -81,13 +133,14 @@ const App = () => {
       tutorialDone ||
       helpOpen ||
       duel ||
+      aiPaused ||
       game.phase === 'MATCH_END'
     ) {
       return
     }
     const timer = window.setTimeout(() => aiStep(), 540)
     return () => window.clearTimeout(timer)
-  }, [game, playerTurn, aiStep, screen, tutorialDone, helpOpen, duel])
+  }, [game, playerTurn, aiStep, screen, tutorialDone, helpOpen, duel, aiPaused])
 
   const act = (command: Command) => {
     dispatch(command, 'player')
@@ -270,15 +323,34 @@ const App = () => {
       {tutorial && !tutorialDone ? (
         <Coach game={game} onSkip={skipTutorial} />
       ) : (
-        <footer className="log-line">
-          {game.log.slice(-2).map((entry, index) => (
-            <p
-              key={`${entry.text}-${index}`}
-              className={`log-entry log-${entry.tone}`}
+        <footer className={`log-line ${lastPlay && !duel ? 'has-last-play' : ''}`}>
+          {lastPlay && !duel && (
+            <button
+              type="button"
+              className="last-play"
+              onClick={reopenDuel}
+              aria-label={`Ver otra vez la última jugada: ${lastPlay.matchup}, ${lastPlay.result}`}
             >
-              {entry.text}
-            </p>
-          ))}
+              <span className="last-play-tag">ÚLTIMA</span>
+              <span className="last-play-copy">{lastPlay.matchup}</span>
+              <span className={`last-play-result is-${lastPlay.tone}`}>
+                {lastPlay.result}
+              </span>
+              <span className="last-play-open" aria-hidden="true">
+                ▸
+              </span>
+            </button>
+          )}
+          {game.log
+            .slice(lastPlay && !duel ? -1 : -2)
+            .map((entry, index) => (
+              <p
+                key={`${entry.text}-${index}`}
+                className={`log-entry log-${entry.tone}`}
+              >
+                {entry.text}
+              </p>
+            ))}
           {game.log.length === 0 && (
             <p className="log-entry">Un set a 7. Vos sacás primero.</p>
           )}
@@ -286,7 +358,12 @@ const App = () => {
       )}
 
       {duel && (
-        <DuelCutIn game={game} duel={duel} onClose={dismissDuel} />
+        <DuelCutIn
+          game={game}
+          duel={duel}
+          startAtResult={duelReplay}
+          onClose={closeDuel}
+        />
       )}
 
       {toast && (
