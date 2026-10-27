@@ -106,7 +106,7 @@ export const TECHNIQUES: Record<TechniqueId, Technique> = {
   },
   muro: {
     id: 'muro',
-    label: 'MURO',
+    label: 'TAPÓN',
     note: '+1 a la defensa',
     kind: 'defense',
     oncePerRally: true,
