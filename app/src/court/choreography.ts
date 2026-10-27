@@ -205,6 +205,8 @@ export type PlayerSample = {
   pose: Pose
   jump: number
   moving: boolean
+  /** Progreso dentro del segmento actual, 0..1. */
+  progress: number
 }
 
 export const samplePlayer = (
@@ -219,13 +221,16 @@ export const samplePlayer = (
   let pose: Pose = 'idle'
   let jump = 0
   let moving = false
+  let progress = 1
 
   for (const segment of segments) {
     if (t < segment.start) break
     pose = segment.pose
     const length = Math.max(1, segment.duration)
     if (t <= segment.start + segment.duration) {
-      const p = ease((t - segment.start) / length)
+      const raw = (t - segment.start) / length
+      const p = ease(raw)
+      progress = Math.min(1, Math.max(0, raw))
       x = lerp(segment.from.x, segment.to.x, p)
       y = lerp(segment.from.y, segment.to.y, p)
       jump = Math.sin(Math.PI * p) * segment.jump
@@ -237,9 +242,10 @@ export const samplePlayer = (
     y = segment.to.y
     jump = 0
     moving = false
+    progress = 1
   }
 
-  return { x, y, groundY: y, pose, jump, moving }
+  return { x, y, groundY: y, pose, jump, moving, progress }
 }
 
 export type BallSample = {

@@ -1575,6 +1575,23 @@ button:disabled {
   display: flex;
   align-items: baseline;
   gap: 4px;
+  transform-origin: center;
+  animation: court-score-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+@keyframes court-score-pop {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  35% {
+    transform: scale(1.16);
+    filter: brightness(1.7);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
 }
 
 .court-score-num {

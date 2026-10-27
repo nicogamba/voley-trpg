@@ -166,6 +166,7 @@ const drawBall = (
   groundY: number,
   z: number,
   time: number,
+  phase: number,
 ) => {
   const shadowScale = Math.max(0.35, 1 - z / 110)
   drawShadow(
@@ -181,7 +182,10 @@ const drawBall = (
   const ballY = Math.round(groundY - z - 8)
   rect(ctx, ballX, ballY, 8, 8, '#ffffff')
   rect(ctx, ballX + 1, ballY + 1, 6, 6, '#f6e6a8')
-  rect(ctx, ballX + 3, ballY + 1, 2, 6, '#5b8cff')
+  // La franja azul se corre para simular el giro.
+  const shift = [0, 1, 1, 0][phase % 4]
+  rect(ctx, ballX + 2 + shift, ballY + 1, 2, 6, '#5b8cff')
+  rect(ctx, ballX + 5 - shift, ballY + 2, 1, 4, '#f6e6a8')
   rect(ctx, ballX + 1, ballY + 3, 6, 2, '#ffffff')
   // Brillo pixelado.
   const glint = Math.sin(time * 0.012) > 0.2 ? '#ffffff' : '#fff6cc'
@@ -198,14 +202,17 @@ const drawPlayer = (
   pose: Pose,
   time: number,
   active: boolean,
+  progress: number,
+  moving: boolean,
 ) => {
   const team = kit
   const accent = CLASS_ACCENT[player.classId]
+  const lunge = pose === 'dig' && moving ? Math.sin(Math.PI * progress) : 0
   let feet = groundY - jump
   const bob = pose === 'idle' ? Math.sin(time * 0.004 + x) * 0.9 : 0
   feet += bob
 
-  if (pose === 'receive' || pose === 'dig') feet += 4
+  if (pose === 'receive' || pose === 'dig') feet += 4 + lunge * 3
 
   drawShadow(ctx, x, groundY + 1, jump > 4 ? 16 : 20, 5, 0.42)
 
@@ -229,17 +236,19 @@ const drawPlayer = (
     rect(ctx, x + 2, legTop, 4, 9, team.shorts)
   }
 
-  // Torso.
-  const torsoX = pose === 'spike' ? x - 5 : x - 6
-  rect(ctx, torsoX, torsoTop, 12, 14, team.shirt)
-  rect(ctx, torsoX + 1, torsoTop + 1, 10, 3, team.trim)
-  rect(ctx, torsoX + 4, torsoTop + 6, 4, 4, accent)
+  // Torso. En la zambullida se estira en horizontal.
+  const torsoW = pose === 'dig' ? 12 + Math.round(lunge * 6) : 12
+  const torsoX =
+    pose === 'spike' ? x - 5 : x - Math.floor(torsoW / 2)
+  rect(ctx, torsoX, torsoTop, torsoW, 14, team.shirt)
+  rect(ctx, torsoX + 1, torsoTop + 1, torsoW - 2, 3, team.trim)
+  rect(ctx, torsoX + Math.floor(torsoW / 2) - 2, torsoTop + 6, 4, 4, accent)
   ctx.strokeStyle = OUTLINE
   ctx.lineWidth = 1
   ctx.strokeRect(
     Math.round(torsoX) + 0.5,
     Math.round(torsoTop) + 0.5,
-    11,
+    torsoW - 1,
     13,
   )
 
@@ -256,13 +265,29 @@ const drawPlayer = (
     rect(ctx, x - 8, headTop - 6, 3, 13, SKIN)
     rect(ctx, x + 5, headTop - 6, 3, 13, SKIN)
   } else if (pose === 'spike') {
-    rect(ctx, x - 10, headTop - 5, 3, 14, SKIN)
-    rect(ctx, x + 6, armTop + 2, 3, 8, SKIN)
+    if (progress < 0.42) {
+      // Armado del remate: brazo atacante atrás y arriba.
+      rect(ctx, x - 9, headTop - 3, 3, 13, SKIN)
+      rect(ctx, x + 5, headTop - 7, 3, 14, SKIN)
+    } else {
+      // Contacto y follow-through.
+      rect(ctx, x - 10, headTop + 1, 3, 12, SKIN)
+      rect(ctx, x + 6, armTop + 2, 3, 8, SKIN)
+    }
   } else if (pose === 'set') {
     rect(ctx, x - 4, headTop - 7, 3, 10, SKIN)
     rect(ctx, x + 2, headTop - 7, 3, 10, SKIN)
-  } else if (pose === 'receive' || pose === 'dig') {
+  } else if (pose === 'receive') {
     rect(ctx, x - 7, armTop + 5, 14, 3, SKIN)
+  } else if (pose === 'dig') {
+    rect(
+      ctx,
+      x - 7 - lunge * 7,
+      armTop + 5 + lunge * 2,
+      14 + lunge * 9,
+      3,
+      SKIN,
+    )
   } else if (pose === 'serve') {
     rect(ctx, x + 6, headTop - 4, 3, 13, SKIN)
     rect(ctx, x - 8, armTop + 4, 3, 8, SKIN)
@@ -332,6 +357,52 @@ const drawImpact = (
     const py = y + Math.sin(angle) * distance
     ctx.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3)
   }
+}
+
+const drawDust = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  groundY: number,
+  progress: number,
+) => {
+  const alpha = Math.max(0, 1 - progress)
+  ctx.fillStyle = `rgba(214, 224, 244, ${0.5 * alpha})`
+  for (let i = 0; i < 5; i += 1) {
+    const angle = Math.PI / 4 + (i / 5) * (Math.PI / 2)
+    const distance = 4 + progress * 14
+    ctx.fillRect(
+      Math.round(x + Math.cos(angle) * distance) - 1,
+      Math.round(groundY + Math.sin(angle) * distance * 0.35) - 1,
+      2,
+      2,
+    )
+  }
+}
+
+const CONFETTI = ['#ffd166', '#67d8ef', '#ff7a8a', '#8ef0a4', '#ffffff']
+
+const drawConfetti = (
+  ctx: CanvasRenderingContext2D,
+  local: number,
+  side: Side,
+) => {
+  if (local < 0 || local > 1100) return
+  ctx.save()
+  for (let i = 0; i < 36; i += 1) {
+    const seed =
+      Math.sin(i * 12.9898 + (side === 'home' ? 4.1 : 7.3)) * 43758.5453
+    const rnd = seed - Math.floor(seed)
+    const delay = (i % 6) * 55
+    const progress = (local - delay) / 800
+    if (progress < 0 || progress > 1) continue
+    const x =
+      12 + rnd * (COURT.width - 24) + Math.sin(progress * 9 + i) * 8
+    const y = -10 + progress * (COURT.height + 24)
+    ctx.globalAlpha = Math.min(1, (1 - progress) * 1.6)
+    ctx.fillStyle = CONFETTI[i % CONFETTI.length]
+    ctx.fillRect(Math.round(x), Math.round(y), 2, 3)
+  }
+  ctx.restore()
 }
 
 export const CourtCanvas = ({
@@ -409,7 +480,19 @@ export const CourtCanvas = ({
           sample.pose,
           t,
           beat?.caption.includes(player.name) ?? false,
+          sample.progress,
+          sample.moving,
         )
+        if (
+          (sample.pose === 'dig' && sample.progress > 0.32) ||
+          (sample.pose === 'spike' && sample.progress > 0.94)
+        ) {
+          const local =
+            sample.pose === 'dig'
+              ? (sample.progress - 0.32) / 0.5
+              : (sample.progress - 0.94) / 0.06
+          drawDust(ctx, sample.x, sample.groundY, Math.min(1, local))
+        }
       }
 
       // Nombres al piso: no se mueven con el salto.
@@ -425,17 +508,32 @@ export const CourtCanvas = ({
 
       // Rastro de la pelota.
       if (ball.segment) {
-        for (let index = 1; index <= 4; index += 1) {
-          const past = sampleBall(timeline, t - index * 34)
-          ctx.fillStyle = `rgba(255, 255, 255, ${0.16 / index})`
+        const strong =
+          ball.segment.kind === 'spike' || ball.segment.kind === 'serve'
+        for (let index = 1; index <= 6; index += 1) {
+          const past = sampleBall(timeline, t - index * 28)
+          const size = Math.max(1, 4 - Math.floor(index / 2))
+          ctx.fillStyle = `rgba(255, 255, 255, ${
+            (strong ? 0.3 : 0.18) / index
+          })`
           ctx.fillRect(
-            Math.round(past.groundX) - 2,
+            Math.round(past.groundX) - Math.floor(size / 2),
             Math.round(past.groundY - past.z - 6),
-            4,
-            4,
+            size,
+            size,
           )
         }
       }
+
+      const spinSpeed =
+        ball.segment?.kind === 'spike'
+          ? 12
+          : ball.segment?.kind === 'serve'
+            ? 8
+            : 5
+      const spinPhase = Math.floor(
+        (ball.segment ? ball.progress : 0) * spinSpeed,
+      )
 
       drawBall(
         ctx,
@@ -443,6 +541,7 @@ export const CourtCanvas = ({
         ball.groundY,
         ball.z,
         t,
+        spinPhase,
       )
 
       if (
@@ -474,6 +573,10 @@ export const CourtCanvas = ({
             )
           }
         }
+      }
+
+      if (beat?.point) {
+        drawConfetti(ctx, t - beat.start, beat.point)
       }
 
       if (beat?.point && t - beat.start < 100) {

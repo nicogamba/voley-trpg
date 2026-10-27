@@ -642,7 +642,10 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
         <TeamBlock team={teams.home} side="home" />
 
         <div className="court-score">
-          <div className="court-score-line">
+          <div
+            className="court-score-line"
+            key={`${shownScore.home}-${shownScore.away}`}
+          >
             <span className="court-score-num">{shownScore.home}</span>
             <span className="court-score-sep">×</span>
             <span className="court-score-num">{shownScore.away}</span>

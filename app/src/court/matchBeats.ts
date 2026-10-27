@@ -122,14 +122,33 @@ export const matchBeats = (
           receiver && !sameCell(receiver.cell, event.target)
             ? move(event.receiverId!, event.target, 'receive', 420)
             : null
+        const caption =
+          event.outcome === 'ace'
+            ? `ACE · ${playerName(server, 'SAQUE')}`
+            : `SAQUE · ${playerName(server, 'SAQUE')}`
 
+        // Primer tiempo: lanzamiento. La pelota sube desde la mano.
         push({
           kind: 'serve',
-          duration: 860,
-          caption:
-            event.outcome === 'ace'
-              ? `ACE · ${playerName(server, 'SAQUE')}`
-              : `SAQUE · ${playerName(server, 'SAQUE')}`,
+          duration: 240,
+          caption,
+          actorId: event.serverId,
+          pose: 'serve',
+          ball: {
+            to: cloneCell(pre.ball),
+            arc: 0,
+            zFrom: 46,
+            zTo: 58,
+            duration: 220,
+            kind: 'serve',
+          },
+        })
+
+        // Segundo tiempo: golpe y vuelo hacia la zona elegida.
+        push({
+          kind: 'serve',
+          duration: 700,
+          caption,
           actorId: event.serverId,
           pose: 'serve',
           fx: 'hit',
@@ -137,10 +156,10 @@ export const matchBeats = (
           ball: {
             to: cloneCell(event.target),
             arc: 54,
-            zFrom: 46,
+            zFrom: 58,
             zTo: 22,
             duration: 560,
-            delay: 240,
+            delay: 0,
             kind: 'serve',
           },
         })
@@ -242,10 +261,10 @@ export const matchBeats = (
           ball: {
             to: cloneCell(blockedDrop),
             arc: isBlocked ? 18 : 8,
-            zFrom: 34,
+            zFrom: 36,
             zTo: isBlocked ? 12 : isPoint ? 0 : 14,
-            duration: 380,
-            delay: 180,
+            duration: 340,
+            delay: 300,
             kind: 'spike',
           },
         })
