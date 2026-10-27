@@ -11,6 +11,7 @@ import {
   AI_STANDARD,
   attackOptions,
   cloneState,
+  defenseCandidates,
   designatedServer,
   designatedSetter,
   isAttackAllowed,
@@ -21,6 +22,7 @@ import {
   receptionQuality,
   receptionValue,
   resolveDuel,
+  schemeDefender,
   setQuality,
   type AttackPlan,
   type AiTuning,
@@ -30,6 +32,7 @@ import {
 import { chooseAttackPlan, chooseDefenseScheme, chooseServeTarget } from './matchAi'
 import { cellDistance, cellsOfSide, otherSide, sameCell } from './geometry'
 import type { CourtCell, CourtPlayer, Side } from './types'
+import { TECHNIQUES, type TechniqueId } from './techniques'
 import type { Rng } from './matchAi'
 
 export class MatchError extends Error {}
@@ -65,6 +68,7 @@ export const createMatch = (options: CreateMatchOptions): MatchState => {
     possession: options.server ?? 'home',
     score: { home: 0, away: 0 },
     ap: 0,
+    defenseTechniqueUsed: false,
     players,
     formation: Object.fromEntries(
       players.map((player) => [player.id, { ...player.cell }]),
@@ -116,6 +120,7 @@ const awardPoint = (
   state.server = side
   state.possession = side
   state.ap = 0
+  state.defenseTechniqueUsed = false
   state.passQuality = 0
   state.setQuality = 0
   state.attackerId = null
@@ -251,6 +256,16 @@ const autoSet = (
   return events
 }
 
+export type AttackChoice = {
+  attackerId?: string
+  technique?: TechniqueId
+}
+
+export type DefenseChoice = {
+  defenderId?: string
+  technique?: TechniqueId
+}
+
 export type EngineResult = {
   state: MatchState
   events: MatchEvent[]
@@ -343,15 +358,25 @@ export const attack = (
   kind: AttackKind,
   target: CourtCell,
   rng: Rng = Math.random,
+  choice: AttackChoice = {},
 ): EngineResult => {
   assert(state.phase === 'ATTACK', 'No es la fase de ataque.')
   assert(state.possession === state.playerSide, 'El ataque no es tuyo.')
   const scheme = state.hiddenScheme ?? chooseDefenseScheme(state, rng)
-  const attacker = pickAttackerFor(state, kind, target)
+  const attacker = choice.attackerId
+    ? playerById(state, choice.attackerId)
+    : pickAttackerFor(state, kind, target)
   assert(attacker, 'No hay atacante legal para ese golpe.')
+  assert(attacker.side === state.possession, 'Ese atacante no es tuyo.')
   const check = isAttackAllowed({ attacker, kind, target })
   if (!check.ok) throw new MatchError(check.reason)
-  const cost = ATTACK_AP_COST[kind]
+  const technique = choice.technique ? TECHNIQUES[choice.technique] : null
+  assert(
+    !technique ||
+      (technique.kind === 'attack' && technique.classId === attacker.classId),
+    'Técnica inválida para ese atacante.',
+  )
+  const cost = ATTACK_AP_COST[kind] + (technique?.cost ?? 0)
   assert(state.ap >= cost, 'No hay energía para ese ataque.')
 
   const next = cloneState(state)
@@ -366,6 +391,7 @@ export const attack = (
     setQuality: next.setQuality,
     defending: playersOf(next, otherSide(attacker.side)),
     scheme,
+    attackTechnique: technique?.id,
   })
   next.ap = Math.max(0, next.ap - cost)
   next.rallyAttacks += 1
@@ -433,6 +459,7 @@ export const defend = (
   state: MatchState,
   scheme: DefenseScheme,
   rng: Rng = Math.random,
+  choice: DefenseChoice = {},
 ): EngineResult => {
   assert(state.phase === 'DEFEND', 'No es la fase defensiva.')
   assert(state.hiddenAttack, 'La IA todavía no eligió su ataque.')
@@ -446,6 +473,37 @@ export const defend = (
   })
   if (!check.ok) throw new MatchError(check.reason)
 
+  const candidates = defenseCandidates(state, scheme)
+  const autoDefender = schemeDefender(
+    playersOf(state, state.playerSide),
+    scheme,
+    plan.target,
+    plan.kind === 'quick',
+  ).player
+  const defender = choice.defenderId
+    ? playerById(state, choice.defenderId)
+    : autoDefender
+  assert(defender, 'Tu defensa no tiene defensor.')
+  assert(
+    !choice.defenderId ||
+      candidates.some((candidate) => candidate.id === defender.id),
+    'Ese jugador no entra en el esquema.',
+  )
+  const technique = choice.technique ? TECHNIQUES[choice.technique] : null
+  assert(
+    !technique ||
+      (technique.kind === 'defense' && technique.classId === defender.classId),
+    'Técnica inválida para ese defensor.',
+  )
+  assert(
+    !technique || !state.defenseTechniqueUsed,
+    'Ya usaste tu técnica defensiva en este rally.',
+  )
+  const attackTechnique = plan.technique
+    ? TECHNIQUES[plan.technique]
+    : null
+  const cost = ATTACK_AP_COST[plan.kind] + (attackTechnique?.cost ?? 0)
+
   const next = cloneState(state)
   if (next.rallyAttacks >= MATCH_RALLY_CAP) {
     return { state: next, events: awardPoint(next, next.playerSide, 'cap') }
@@ -458,8 +516,13 @@ export const defend = (
     setQuality: next.setQuality,
     defending: playersOf(next, next.playerSide),
     scheme,
+    defenderId: defender.id,
+    defenseTechnique: technique?.id,
+    attackTechnique: plan.technique,
   })
-  next.ap = Math.max(0, next.ap - ATTACK_AP_COST[plan.kind])
+  next.ap = Math.max(0, next.ap - cost)
+  next.defenseTechniqueUsed =
+    next.defenseTechniqueUsed || Boolean(technique)
   next.rallyAttacks += 1
   next.attackerId = attacker.id
   next.hiddenAttack = null
@@ -491,12 +554,12 @@ export const defend = (
     }
   }
 
-  const defender = playerById(next, resolution.defenderId)
-  assert(defender, 'Tu defensa no tiene defensor.')
+  const dugBy = playerById(next, resolution.defenderId)
+  assert(dugBy, 'Tu defensa no tiene defensor.')
   const digQuality = resolution.digQuality ?? 1
-  const defenderFrom = { ...defender.cell }
-  const setter = designatedSetter(next, next.playerSide, defender.id)
-  movePlayer(next, defender.id, plan.target)
+  const defenderFrom = { ...dugBy.cell }
+  const setter = designatedSetter(next, next.playerSide, dugBy.id)
+  movePlayer(next, dugBy.id, plan.target)
   startPossession(
     next,
     next.playerSide,
@@ -510,12 +573,12 @@ export const defend = (
       ...events,
       {
         type: 'DIG',
-        defenderId: defender.id,
+        defenderId: dugBy.id,
         from: defenderFrom,
         to: { ...setter.cell },
         quality: digQuality,
       },
-      ...autoSet(next, next.playerSide, defender.id, rng),
+      ...autoSet(next, next.playerSide, dugBy.id, rng),
     ],
   }
 }

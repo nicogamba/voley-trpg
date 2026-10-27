@@ -3,12 +3,17 @@ import { ATTACK_AP_COST, ATTACK_LABEL } from '../engine'
 import type { AttackKind, DefenseScheme } from '../engine'
 import CourtCanvas from './CourtCanvas'
 import CourtCutIn from './CourtCutIn'
+import CourtDuelModal, { type DuelChoice } from './CourtDuelModal'
 import CourtSidebar from './CourtSidebar'
 import { primeAudio } from './audio'
 import { COURT, cellDistance, cellsOfSide, cellOrigin, sameCell, zoneOf } from './geometry'
 import type { LadderStage } from './ladder'
 import {
+  attackCandidates,
   attackOptions,
+  defenseCandidates,
+  schemeHint,
+  schemeLabel,
   type MatchEvent,
   type MatchState,
 } from './match'
@@ -66,6 +71,25 @@ type Animation = {
   events: MatchEvent[]
   beats: BeatSpec[]
 }
+
+type DuelWindow =
+  | {
+      mode: 'attack'
+      kind: AttackKind
+      target: CourtCell
+      candidates: CourtPlayer[]
+      baseCost: number
+      label: string
+      detail: string
+    }
+  | {
+      mode: 'defense'
+      scheme: DefenseScheme
+      candidates: CourtPlayer[]
+      baseCost: number
+      label: string
+      detail: string
+    }
 
 const SERVER_ID = 'home-opposite'
 const SETUP_HINT = 'ORDENÁ · TOCÁ UN JUGADOR'
@@ -167,6 +191,7 @@ export const CourtScreen = ({
     title: string
     side: Side
   } | null>(null)
+  const [duel, setDuel] = useState<DuelWindow | null>(null)
   const rngRef = useRef<Rng>(mulberry32(0x20261027))
   const cutinTimer = useRef<number | null>(null)
   const stampTimer = useRef<number | null>(null)
@@ -245,9 +270,7 @@ export const CourtScreen = ({
 
   const attackHint =
     selectedOption && attackKind
-      ? `ATAQUE · ${ATTACK_LABEL[attackKind]} · ${
-          selectedOption.attacker.name
-        } · ELEGÍ LA ZONA`
+      ? `ATAQUE · ${ATTACK_LABEL[attackKind]} · ELEGÍ LA ZONA`
       : 'ATAQUE · ELEGÍ EL GOLPE'
 
   const won = match.winner === 'home'
@@ -269,6 +292,7 @@ export const CourtScreen = ({
     setAttackKind(null)
     setCaption(SETUP_HINT)
     setNotice(null)
+    setDuel(null)
     clearCutIn()
     clearStamp()
     setSetupSeq((value) => value + 1)
@@ -283,6 +307,7 @@ export const CourtScreen = ({
     setAttackKind(null)
     setSelectedId(null)
     setMove(null)
+    setDuel(null)
     clearCutIn()
     clearStamp()
     const decision = nextDecision(next)
@@ -306,6 +331,7 @@ export const CourtScreen = ({
     setAttackKind(null)
     setSelectedId(null)
     setMove(null)
+    setDuel(null)
     clearCutIn()
     clearStamp()
     setCaption(beats[0]?.caption ?? '')
@@ -411,12 +437,53 @@ export const CourtScreen = ({
 
   const commitAttack = (target: CourtCell) => {
     if (ui !== 'attack' || !attackKind) return
-    run(() => attack(match, attackKind, target, rngRef.current))
+    const candidates = attackCandidates(match, attackKind, target)
+    if (candidates.length === 0) {
+      setNotice('NO HAY ATACANTE PARA ESA ZONA')
+      return
+    }
+    setDuel({
+      mode: 'attack',
+      kind: attackKind,
+      target,
+      candidates,
+      baseCost: ATTACK_AP_COST[attackKind],
+      label: ATTACK_LABEL[attackKind],
+      detail: `ZONA ${zoneOf('away', target.row, target.col)} · ${ATTACK_AP_COST[attackKind]} EN`,
+    })
   }
 
   const commitDefense = (scheme: DefenseScheme) => {
     if (ui !== 'defend') return
-    run(() => defend(match, scheme, rngRef.current))
+    setDuel({
+      mode: 'defense',
+      scheme,
+      candidates: defenseCandidates(match, scheme),
+      baseCost: 0,
+      label: schemeLabel(scheme),
+      detail: schemeHint(scheme).toUpperCase(),
+    })
+  }
+
+  const confirmDuel = (choice: DuelChoice) => {
+    const pending = duel
+    setDuel(null)
+    if (!pending) return
+    if (pending.mode === 'attack') {
+      run(() =>
+        attack(match, pending.kind, pending.target, rngRef.current, {
+          attackerId: choice.playerId,
+          technique: choice.technique,
+        }),
+      )
+      return
+    }
+    run(() =>
+      defend(match, pending.scheme, rngRef.current, {
+        defenderId: choice.playerId,
+        technique: choice.technique,
+      }),
+    )
   }
 
   const continueAiServe = () => {
@@ -729,8 +796,9 @@ export const CourtScreen = ({
   const awayRoster = match.players.filter((player) => player.side === 'away')
 
   return (
-    <div className="court-arena">
-      <CourtSidebar
+    <>
+      <div className="court-arena">
+        <CourtSidebar
         side="home"
         team={teams.home}
         players={homeRoster}
@@ -854,15 +922,40 @@ export const CourtScreen = ({
       {renderPanel()}
       </div>
 
-      <CourtSidebar
-        side="away"
-        team={teams.away}
-        players={awayRoster}
-        kicker="RIVAL"
-        note={`ESTILO ${TEAMS[stage.rival].style}`}
-        commentary={captionText}
-      />
-    </div>
+        <CourtSidebar
+          side="away"
+          team={teams.away}
+          players={awayRoster}
+          kicker="RIVAL"
+          note={`ESTILO ${TEAMS[stage.rival].style}`}
+          commentary={captionText}
+        />
+      </div>
+
+      {duel && (
+        <CourtDuelModal
+          mode={duel.mode}
+          players={duel.candidates}
+          opponent={teams.away}
+          label={duel.label}
+          detail={duel.detail}
+          resourceLabel={duel.mode === 'attack' ? 'ENERGÍA' : 'TÉCNICA'}
+          resourceValue={
+            duel.mode === 'attack'
+              ? match.ap
+              : match.defenseTechniqueUsed
+                ? 0
+                : 1
+          }
+          baseCost={duel.baseCost}
+          techniquesLocked={
+            duel.mode === 'defense' && match.defenseTechniqueUsed
+          }
+          onCancel={() => setDuel(null)}
+          onConfirm={confirmDuel}
+        />
+      )}
+    </>
   )
 }
 

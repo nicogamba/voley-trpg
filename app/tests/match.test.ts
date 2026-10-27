@@ -3,7 +3,9 @@ import { DEMO_PLAYERS } from '../src/court/demo'
 import { cell, cellsOfSide } from '../src/court/geometry'
 import {
   MATCH_TARGET,
+  attackCandidates,
   attackOptions,
+  defenseCandidates,
   isAttackAllowed,
   type MatchState,
 } from '../src/court/match'
@@ -136,6 +138,86 @@ describe('motor de partido v2', () => {
     expect(
       ['SERVE', 'ATTACK', 'DEFEND', 'END'].includes(result.state.phase),
     ).toBe(true)
+  })
+
+  it('permite elegir atacante y técnica, y cobra la energía', () => {
+    const state = create()
+    state.phase = 'ATTACK'
+    state.possession = 'home'
+    state.ap = 3
+    state.hiddenScheme = 'spread'
+    state.setQuality = 2
+    const target = cell('away', 1, 2)
+    const candidates = attackCandidates(state, 'power', target)
+    const attacker = candidates.find((player) => player.classId === 'opposite')
+    expect(attacker).toBeTruthy()
+
+    const normal = attack(state, 'power', target, mulberry32(9), {
+      attackerId: attacker!.id,
+    })
+    const special = attack(state, 'power', target, mulberry32(9), {
+      attackerId: attacker!.id,
+      technique: 'cometa',
+    })
+    expect(special.events[0]?.type).toBe('ATTACK')
+    const normalEvent = normal.events[0]
+    const specialEvent = special.events[0]
+    expect(normalEvent?.type).toBe('ATTACK')
+    expect(specialEvent?.type).toBe('ATTACK')
+    if (normalEvent?.type !== 'ATTACK' || specialEvent?.type !== 'ATTACK') {
+      throw new Error('La jugada no resolvió un ataque.')
+    }
+    expect(specialEvent.resolution.attackTechnique).toBe('cometa')
+    expect(specialEvent.resolution.A).toBe(normalEvent.resolution.A + 1)
+    expect(special.state.ap).toBe(0)
+
+    const beats = matchBeats(state, special.events, special.state, DEMO_TEAMS)
+    const spike = beats.find((beat) => beat.kind === 'spike')
+    expect(spike?.cutin?.move).toBe('COMETA')
+    expect(spike?.caption).toContain('COMETA')
+  })
+
+  it('permite elegir defensa y técnica, una vez por rally', () => {
+    const served = serve(create(), cell('away', 1, 2), mulberry32(10))
+    const state = served.state
+    state.ap = 3
+    state.defenseTechniqueUsed = false
+    const candidates = defenseCandidates(state, 'libero')
+    const libero = candidates.find((player) => player.classId === 'libero')
+    expect(libero).toBeTruthy()
+
+    const wall = defenseCandidates(state, 'wall')
+    expect(wall.length).toBeGreaterThan(0)
+    expect(
+      wall.every(
+        (player) => player.cell.row === 0 && player.classId !== 'libero',
+      ),
+    ).toBe(true)
+
+    const result = defend(state, 'libero', mulberry32(11), {
+      defenderId: libero!.id,
+      technique: 'zambullida',
+    })
+    expect(result.events[0]?.type).toBe('ATTACK')
+    const event = result.events[0]
+    if (event?.type !== 'ATTACK') {
+      throw new Error('La defensa no resolvió un ataque.')
+    }
+    expect(event.resolution.defenderId).toBe(libero!.id)
+    expect(event.resolution.defenseTechnique).toBe('zambullida')
+    expect(result.state.defenseTechniqueUsed).toBe(true)
+
+    const spent = {
+      ...state,
+      defenseTechniqueUsed: true,
+      phase: 'DEFEND' as const,
+    }
+    expect(() =>
+      defend(spent, 'libero', mulberry32(12), {
+        defenderId: libero!.id,
+        technique: 'zambullida',
+      }),
+    ).toThrow(/técnica defensiva/)
   })
 
   it('termina el set a 7 sin colgarse', () => {    let state: MatchState = create()

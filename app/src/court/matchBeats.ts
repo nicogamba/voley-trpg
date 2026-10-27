@@ -1,6 +1,7 @@
 import { ATTACK_LABEL } from '../engine'
 import type { AttackKind } from '../engine'
 import { cell, sameCell } from './geometry'
+import { TECHNIQUES } from './techniques'
 import type { MatchEvent, MatchState } from './match'
 import type { CourtTeam } from './types'
 import type { BeatSpec, CourtCell, CourtPlayer, MoveSpec, Pose, Side } from './types'
@@ -233,6 +234,13 @@ export const matchBeats = (
         const attacker = getPlayer(event.attackerId)
         const resolution = event.resolution
         const label = ATTACK_LABEL[event.kind as AttackKind] ?? 'ATAQUE'
+        const attackTechnique = resolution.attackTechnique
+          ? TECHNIQUES[resolution.attackTechnique]
+          : null
+        const defenseTechnique = resolution.defenseTechnique
+          ? TECHNIQUES[resolution.defenseTechnique]
+          : null
+        const moveLabel = attackTechnique?.label ?? label.toUpperCase()
         const isBlocked = resolution.outcome === 'blocked'
         const isPoint = resolution.outcome === 'point'
         const blockerIds = new Set(resolution.blockerIds)
@@ -271,15 +279,17 @@ export const matchBeats = (
                 leftId: event.attackerId,
                 rightId: defenderId,
                 leftLabel: 'REMATE',
-                rightLabel: isBlocked ? 'BLOQUEO' : 'DEFENSA',
-                move: label.toUpperCase(),
+                rightLabel:
+                  defenseTechnique?.label ??
+                  (isBlocked ? 'BLOQUEO' : 'DEFENSA'),
+                move: moveLabel,
               }
             : undefined
 
         push({
           kind: 'spike',
           duration: 900,
-          caption: `${label.toUpperCase()} · ${playerName(attacker, 'ATAQUE')}`,
+          caption: `${moveLabel} · ${playerName(attacker, 'ATAQUE')}`,
           actorId: event.attackerId,
           pose: 'spike',
           fx: isBlocked ? 'block' : 'hit',

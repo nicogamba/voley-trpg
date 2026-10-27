@@ -18,10 +18,15 @@ export const CourtCutIn = ({
   const right = players.find((player) => player.id === cutin.rightId)
   if (!left || !right) return null
 
+  // La banda se ubica del lado contrario al jugador que actúa para no taparlo.
+  const focusId = cutin.kind === 'serve' ? cutin.rightId : cutin.leftId
+  const focus = players.find((player) => player.id === focusId)
+  const position = focus?.side === 'home' ? 'is-top' : 'is-bottom'
+
   return (
     <button
       type="button"
-      className={`court-cutin is-${cutin.kind}`}
+      className={`court-cutin is-${cutin.kind} ${position}`}
       style={{ animationDuration: `${duration}ms` }}
       onClick={onSkip}
       aria-label={`Duelo: ${left.name} contra ${right.name}. Tocá para seguir.`}

@@ -14,6 +14,7 @@ import type {
   Quality,
 } from '../engine'
 import { cellDistance, cellsOfSide, otherSide } from './geometry'
+import { TECHNIQUES, type TechniqueId } from './techniques'
 import type { CourtCell, CourtPlayer, Side } from './types'
 
 /** Reglas del partido v2 sobre la grilla de 4 columnas x 3 filas. */
@@ -33,6 +34,7 @@ export type AttackPlan = {
   attackerId: string
   kind: AttackKind
   target: CourtCell
+  technique?: TechniqueId
 }
 
 export type DuelResolution = {
@@ -45,6 +47,8 @@ export type DuelResolution = {
   defenderId: string
   blockerIds: string[]
   scheme: DefenseScheme
+  attackTechnique?: TechniqueId
+  defenseTechnique?: TechniqueId
 }
 
 export type AttackRecord = { side: Side; kind: AttackKind }
@@ -79,6 +83,8 @@ export type MatchState = {
   possession: Side
   score: Record<Side, number>
   ap: number
+  /** El jugador ya gastó su técnica defensiva en este rally. */
+  defenseTechniqueUsed: boolean
   players: CourtPlayer[]
   /** Posiciones de arranque de cada rally. */
   formation: Record<string, CourtCell>
@@ -452,18 +458,39 @@ export const resolveDuel = (params: {
   setQuality: Quality
   defending: CourtPlayer[]
   scheme: DefenseScheme
+  defenderId?: string
+  attackTechnique?: TechniqueId
+  defenseTechnique?: TechniqueId
 }): DuelResolution => {
-  const { attacker, kind, target, setQuality: setQ, defending, scheme } = params
-  const { player: defender, value } = schemeDefender(
+  const {
+    attacker,
+    kind,
+    target,
+    setQuality: setQ,
     defending,
     scheme,
-    target,
-    kind === 'quick',
-  )
+    defenderId,
+    attackTechnique,
+    defenseTechnique,
+  } = params
+  const auto = schemeDefender(defending, scheme, target, kind === 'quick')
+  const chosen = defenderId
+    ? defending.find((player) => player.id === defenderId)
+    : undefined
+  const defender = chosen ?? auto.player
+  const value = chosen
+    ? schemeDefender([chosen], scheme, target, kind === 'quick').value
+    : auto.value
   const zone = schemeZoneBonus(scheme, target)
   const edge = SCHEME_EDGE[scheme][kind]
-  const A = attackValue(attacker, kind, setQ, target)
-  const D = SCHEME_BASE[scheme] + value + zone + edge
+  const attackBonus = attackTechnique
+    ? TECHNIQUES[attackTechnique].bonus
+    : 0
+  const defenseBonus = defenseTechnique
+    ? TECHNIQUES[defenseTechnique].bonus
+    : 0
+  const A = attackValue(attacker, kind, setQ, target) + attackBonus
+  const D = SCHEME_BASE[scheme] + value + zone + edge + defenseBonus
   const delta = A - D
   const netScheme = scheme === 'wall' || scheme === 'spread'
   const blockerIds = schemeBlockerIds(defending, scheme, defender)
@@ -479,6 +506,8 @@ export const resolveDuel = (params: {
       defenderId: defender.id,
       blockerIds,
       scheme,
+      attackTechnique,
+      defenseTechnique,
     }
   }
 
@@ -493,6 +522,8 @@ export const resolveDuel = (params: {
       defenderId: defender.id,
       blockerIds,
       scheme,
+      attackTechnique,
+      defenseTechnique,
     }
   }
 
@@ -507,23 +538,42 @@ export const resolveDuel = (params: {
     defenderId: defender.id,
     blockerIds,
     scheme,
+    attackTechnique,
+    defenseTechnique,
   }
 }
+
+export const attackCandidates = (
+  state: MatchState,
+  kind: AttackKind,
+  target: CourtCell,
+): CourtPlayer[] =>
+  playersOf(state, state.possession)
+    .filter((player) => isAttackAllowed({ attacker: player, kind, target }).ok)
+    .sort(
+      (a, b) =>
+        attackValue(b, kind, state.setQuality, target) -
+          attackValue(a, kind, state.setQuality, target) ||
+        a.id.localeCompare(b.id),
+    )
 
 export const pickAttackerFor = (
   state: MatchState,
   kind: AttackKind,
   target: CourtCell,
-): CourtPlayer | undefined => {
-  const candidates = playersOf(state, state.possession).filter(
-    (player) => isAttackAllowed({ attacker: player, kind, target }).ok,
-  )
-  return candidates.sort(
-    (a, b) =>
-      attackValue(b, kind, state.setQuality, target) -
-        attackValue(a, kind, state.setQuality, target) ||
-      a.id.localeCompare(b.id),
-  )[0]
+): CourtPlayer | undefined => attackCandidates(state, kind, target)[0]
+
+/** Jugadores que pueden ejecutar el esquema; sin revelar la zona rival. */
+export const defenseCandidates = (
+  state: MatchState,
+  scheme: DefenseScheme,
+): CourtPlayer[] => {
+  const defending = playersOf(state, state.playerSide)
+  return [...schemePool(defending, scheme)].sort((a, b) => {
+    const av = schemePlayerValue(a, scheme, state.ball, true)
+    const bv = schemePlayerValue(b, scheme, state.ball, true)
+    return bv - av || a.id.localeCompare(b.id)
+  })
 }
 
 export type AttackOption = {

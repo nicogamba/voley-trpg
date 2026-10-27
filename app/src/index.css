@@ -1866,6 +1866,19 @@ button:disabled {
   white-space: nowrap;
 }
 
+.court-cutin.is-top {
+  top: 0;
+  bottom: auto;
+  border-top: 0;
+  border-bottom: 2px solid var(--gold);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+  animation-name: court-cutin-show-top;
+}
+
+.court-cutin.is-top.is-block {
+  border-bottom-color: var(--red);
+}
+
 .court-cutin.is-block {
   border-top-color: var(--red);
 }
@@ -1889,6 +1902,25 @@ button:disabled {
   }
   100% {
     transform: translateY(16%);
+    opacity: 0;
+  }
+}
+
+@keyframes court-cutin-show-top {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  86% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-16%);
     opacity: 0;
   }
 }
@@ -1961,6 +1993,314 @@ button:disabled {
   100% {
     opacity: 0;
     transform: scale(1.06) rotate(-6deg);
+  }
+}
+
+
+/* Ventana de duelo C: elegir jugador y técnica antes del beat. */
+.court-duel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(91, 140, 255, 0.16), transparent 55%),
+    rgba(3, 5, 10, 0.9);
+  backdrop-filter: blur(2px);
+}
+
+.court-duel {
+  position: relative;
+  width: min(94vw, 380px);
+  max-height: 92svh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 209, 102, 0.06), transparent 30%),
+    #080d18;
+  border: 2px solid #2a3654;
+  border-top: 3px solid var(--gold);
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 36px rgba(91, 140, 255, 0.25);
+  animation: court-duel-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.court-duel.is-defense {
+  border-top-color: var(--cyan);
+}
+
+.court-duel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0 3px,
+    rgba(0, 0, 0, 0.18) 3px 4px
+  );
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.court-duel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.court-duel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1b2740;
+}
+
+.court-duel-kicker {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--gold);
+}
+
+.court-duel.is-defense .court-duel-kicker {
+  color: var(--cyan);
+}
+
+.court-duel-head strong {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--paper);
+}
+
+.court-duel-ap {
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  color: #9fb0d5;
+}
+
+.court-duel-stage {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.court-duel-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.court-duel-side b {
+  max-width: 100%;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: var(--paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.court-duel-side small {
+  font-size: 6px;
+  letter-spacing: 0.12em;
+  color: #8fa4c8;
+}
+
+.court-duel-role {
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #7f8fb0;
+}
+
+.court-duel-stats {
+  display: flex;
+  gap: 3px;
+  font-size: 6px;
+  color: #6d7ea3;
+}
+
+.court-duel-stats i {
+  font-style: normal;
+}
+
+.court-duel-core {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.court-duel-core strong {
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--red);
+  text-shadow: 2px 2px 0 #000;
+}
+
+.court-duel-label {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.court-duel.is-defense .court-duel-label {
+  color: var(--cyan);
+}
+
+.court-duel-detail {
+  font-size: 6px;
+  letter-spacing: 0.08em;
+  color: #8fa4c8;
+  white-space: nowrap;
+}
+
+.court-duel-hidden {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  gap: 2px;
+  border: 2px dashed #3a4a6e;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(91, 140, 255, 0.06) 0 4px,
+      transparent 4px 10px
+    ),
+    #05070d;
+}
+
+.court-duel-hidden .court-flag {
+  width: 22px;
+  height: 14px;
+}
+
+.court-duel-hidden b {
+  font-size: 24px;
+  color: #3a4a6e;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.court-duel-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.court-duel-player {
+  flex: 1 1 64px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+  appearance: none;
+  background: #0a1020;
+  border: 1px solid #2a3654;
+  color: var(--paper);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.court-duel-player span {
+  font-size: 5px;
+  letter-spacing: 0.12em;
+  color: #7f8fb0;
+}
+
+.court-duel-player b {
+  font-size: 7px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.court-duel-player.is-selected {
+  border-color: var(--gold);
+  background: rgba(255, 209, 102, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 209, 102, 0.35);
+}
+
+.court-duel-techs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.court-duel-tech {
+  flex: 1 1 84px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 4px;
+  appearance: none;
+  background: #101827;
+  border: 1px solid #2a3654;
+  color: var(--paper);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.court-duel-tech b {
+  font-size: 7px;
+  letter-spacing: 0.06em;
+}
+
+.court-duel-tech small {
+  font-size: 5px;
+  letter-spacing: 0.02em;
+  color: #8fa4c8;
+}
+
+.court-duel-tech.is-selected {
+  border-color: var(--gold);
+  background: rgba(255, 209, 102, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 209, 102, 0.4);
+}
+
+.court-duel-tech:disabled {
+  opacity: 0.32;
+}
+
+.court-duel-foot {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+@keyframes court-duel-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .court-duel {
+    animation: none;
   }
 }
 

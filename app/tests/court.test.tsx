@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import CourtScreen from '../src/court/CourtScreen'
 import CourtCutIn from '../src/court/CourtCutIn'
+import CourtDuelModal from '../src/court/CourtDuelModal'
 import LadderScreen from '../src/court/LadderScreen'
 import { LADDER, EMPTY_PROGRESS } from '../src/court/ladder'
 import {
@@ -10,7 +11,7 @@ import {
   sampleBall,
   samplePlayer,
 } from '../src/court/choreography'
-import { DEMO_PLAYERS, DEMO_RALLY, INITIAL_BALL } from '../src/court/demo'
+import { DEMO_PLAYERS, DEMO_RALLY, DEMO_TEAMS, INITIAL_BALL } from '../src/court/demo'
 import { cell, cellCenter, reaches, zoneLabel, zoneOf } from '../src/court/geometry'
 import {
   BALL_SHEET,
@@ -302,6 +303,56 @@ describe('cut-in de duelo', () => {
     expect(html).toContain('MOLINA')
     expect(html).toContain('SOUZA')
     expect(html).toContain('VS')
+  })
+})
+
+describe('ventana de duelo C', () => {
+  it('muestra jugador, técnica y costo en ataque', () => {
+    const molina = DEMO_PLAYERS.find((player) => player.id === 'home-opposite')!
+    const html = renderToString(
+      <CourtDuelModal
+        mode="attack"
+        players={[molina]}
+        opponent={DEMO_TEAMS.away}
+        label="POTENCIA"
+        detail="ZONA 4 · 2 EN"
+        resourceLabel="ENERGÍA"
+        resourceValue={3}
+        baseCost={2}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+      />,
+    )
+    expect(html).toContain('DUELO')
+    expect(html).toContain('ATAQUE')
+    expect(html).toContain('MARTILLO')
+    expect(html).toContain('COMETA')
+    expect(html).toContain('ATACAR')
+    expect(html).toContain('ENERGÍA')
+  })
+
+  it('muestra la técnica defensiva y el estado por rally', () => {
+    const sosa = DEMO_PLAYERS.find((player) => player.id === 'home-libero')!
+    const html = renderToString(
+      <CourtDuelModal
+        mode="defense"
+        players={[sosa]}
+        opponent={DEMO_TEAMS.away}
+        label="LÍBERO"
+        detail="LEE LAS MANOS"
+        resourceLabel="TÉCNICA"
+        resourceValue={1}
+        baseCost={0}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+      />,
+    )
+    expect(html).toContain('DEFENSA')
+    expect(html).toContain('ZAMBULLIDA')
+    expect(html).toContain('LECTURA')
+    expect(html).toContain('TÉCNICA')
+    expect(html).toContain('LISTA')
+    expect(html).toContain('1 por rally')
   })
 })
 

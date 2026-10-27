@@ -20,6 +20,7 @@ import {
   sameCell,
 } from './geometry'
 import type { CourtCell, CourtPlayer, Side } from './types'
+import { techniquesFor } from './techniques'
 
 export type Rng = () => number
 
@@ -236,6 +237,25 @@ const aiPlans = (state: MatchState): ScoredPlan[] => {
   return plans
 }
 
+const withTechnique = (
+  state: MatchState,
+  plan: AttackPlan,
+  rng: Rng,
+): AttackPlan => {
+  const attacker = playersOf(state, state.possession).find(
+    (player) => player.id === plan.attackerId,
+  )
+  if (!attacker) return plan
+  const chance = Math.min(0.55, 0.22 + state.ai.adapt * 0.45)
+  if (rng() > chance) return plan
+  const options = techniquesFor(attacker.classId, 'attack').filter(
+    (technique) =>
+      state.ap >= ATTACK_AP_COST[plan.kind] + technique.cost,
+  )
+  if (options.length === 0) return plan
+  return { ...plan, technique: pick(options, rng).id }
+}
+
 /** Elige un ataque rival entre los mejores, sin ser siempre el óptimo. */
 export const chooseAttackPlan = (
   state: MatchState,
@@ -253,22 +273,30 @@ export const chooseAttackPlan = (
   }
   if (rng() < state.ai.noise) {
     const wild = pick(plans, rng)
-    return {
-      attackerId: wild.attackerId,
-      kind: wild.kind,
-      target: { ...wild.target },
-    }
+    return withTechnique(
+      state,
+      {
+        attackerId: wild.attackerId,
+        kind: wild.kind,
+        target: { ...wild.target },
+      },
+      rng,
+    )
   }
   const maximum = Math.max(...plans.map((plan) => plan.score))
   const pool = plans.filter(
     (plan) => maximum - plan.score <= state.ai.tolerance,
   )
   const chosen = pick(pool, rng)
-  return {
-    attackerId: chosen.attackerId,
-    kind: chosen.kind,
-    target: { ...chosen.target },
-  }
+  return withTechnique(
+    state,
+    {
+      attackerId: chosen.attackerId,
+      kind: chosen.kind,
+      target: { ...chosen.target },
+    },
+    rng,
+  )
 }
 
 /** Saque automático de la IA, ya resuelto como evento del motor. */
