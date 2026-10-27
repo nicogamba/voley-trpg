@@ -2,7 +2,9 @@ import { useState } from 'react'
 import PixelPortrait from '../game/PixelPortrait'
 import { Flag } from './TeamBadge'
 import { techniquesFor, type Technique, type TechniqueId } from './techniques'
+import type { Tell } from './narration'
 import type { CourtPlayer, CourtTeam } from './types'
+import Typewriter from './Typewriter'
 
 const ROLE: Record<CourtPlayer['classId'], string> = {
   setter: 'ARMADOR',
@@ -33,6 +35,10 @@ type Props = {
   resourceValue: number
   baseCost: number
   techniquesLocked?: boolean
+  context?: string
+  narration?: string
+  tell?: Tell
+  rival?: { player: CourtPlayer; label: string; detail: string }
   onCancel: () => void
   onConfirm: (choice: DuelChoice) => void
 }
@@ -47,17 +53,24 @@ export const CourtDuelModal = ({
   resourceValue,
   baseCost,
   techniquesLocked = false,
+  context,
+  narration,
+  tell,
+  rival,
   onCancel,
   onConfirm,
 }: Props) => {
   const [selectedId, setSelectedId] = useState(players[0]?.id ?? '')
   const [technique, setTechnique] = useState<TechniqueId | null>(null)
+  const [stage, setStage] = useState<'choose' | 'reveal'>('choose')
 
   const selected =
     players.find((player) => player.id === selectedId) ?? players[0]
   if (!selected) return null
 
   const techniques = techniquesFor(selected.classId, mode)
+  const techniqueLabel =
+    techniques.find((tech) => tech.id === technique)?.label ?? 'NORMAL'
   const normalCost = mode === 'attack' ? baseCost : 0
   const normalAffordable =
     mode === 'attack' ? resourceValue >= normalCost : true
@@ -78,9 +91,15 @@ export const CourtDuelModal = ({
 
   return (
     <div className="court-duel-backdrop" role="dialog" aria-modal="true" aria-label="Duelo">
-      <div className={`court-duel is-${mode}`}>
+      <div
+        className={`court-duel is-${mode}${
+          stage === 'reveal' ? ' is-reveal' : ''
+        }`}
+      >
         <header className="court-duel-head">
-          <span className="court-duel-kicker">DUELO</span>
+          <span className="court-duel-kicker">
+            {stage === 'reveal' ? 'REVELACIÓN' : 'DUELO'}
+          </span>
           <strong>{mode === 'attack' ? 'ATAQUE' : 'DEFENSA'}</strong>
           <span className="court-duel-ap">
             {resourceLabel}{' '}
@@ -91,6 +110,23 @@ export const CourtDuelModal = ({
               : resourceValue}
           </span>
         </header>
+
+        {context && <p className="court-duel-context">{context}</p>}
+
+        {stage === 'choose' && (narration || tell) && (
+          <div className="court-duel-copy">
+            {narration && (
+              <p className="court-duel-narration">
+            <Typewriter key={narration} text={narration} />
+          </p>
+            )}
+            {tell && (
+              <p className="court-duel-tell">
+                <span>PISTA</span> {tell.text}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="court-duel-stage">
           <div className="court-duel-side">
@@ -120,16 +156,35 @@ export const CourtDuelModal = ({
 
           <div className="court-duel-side is-rival">
             <span className="court-duel-role">RIVAL</span>
-            <span className="court-duel-hidden" aria-hidden="true">
-              <Flag team={opponent} />
-              <b>?</b>
-            </span>
-            <b>{mode === 'attack' ? 'DEFENSA' : 'ATAQUE'}</b>
-            <small>{mode === 'attack' ? 'ESQUEMA OCULTO' : 'ZONA OCULTA'}</small>
+            {stage === 'reveal' && rival ? (
+              <>
+                <PixelPortrait
+                  classId={rival.player.classId}
+                  side={rival.player.side}
+                  size={76}
+                />
+                <b>{rival.player.name}</b>
+                <small>{rival.label}</small>
+                <span className="court-duel-stats">
+                  {rival.detail.toUpperCase()}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="court-duel-hidden" aria-hidden="true">
+                  <Flag team={opponent} />
+                  <b>?</b>
+                </span>
+                <b>{mode === 'attack' ? 'DEFENSA' : 'ATAQUE'}</b>
+                <small>
+                  {mode === 'attack' ? 'ESQUEMA OCULTO' : 'ZONA OCULTA'}
+                </small>
+              </>
+            )}
           </div>
         </div>
 
-        {players.length > 1 && (
+        {stage === 'choose' && players.length > 1 && (
           <div
             className="court-duel-candidates"
             role="group"
@@ -152,6 +207,7 @@ export const CourtDuelModal = ({
           </div>
         )}
 
+        {stage === 'choose' && (
         <div
           className="court-duel-techs"
           role="group"
@@ -192,26 +248,54 @@ export const CourtDuelModal = ({
             )
           })}
         </div>
+        )}
+
+        {stage === 'reveal' && rival && (
+          <div className="court-duel-verdict">
+            <span>VOS</span>
+            <b>
+              {selected.name} · {techniqueLabel}
+            </b>
+            <span>RIVAL</span>
+            <b>
+              {rival.player.name} · {rival.label}
+            </b>
+          </div>
+        )}
 
         <footer className="court-duel-foot">
           <button
             type="button"
             className="pixel-btn ghost"
-            onClick={onCancel}
+            onClick={() => {
+              if (stage === 'reveal') {
+                setStage('choose')
+              } else {
+                onCancel()
+              }
+            }}
           >
-            VOLVER
+            {stage === 'reveal' ? 'CAMBIAR' : 'VOLVER'}
           </button>
           <button
             type="button"
             className="pixel-btn primary"
-            onClick={() =>
+            onClick={() => {
+              if (stage === 'choose') {
+                setStage('reveal')
+                return
+              }
               onConfirm({
                 playerId: selected.id,
                 technique: technique ?? undefined,
               })
-            }
+            }}
           >
-            {mode === 'attack' ? 'ATACAR' : 'DEFENDER'}
+            {stage === 'reveal'
+              ? 'VER JUGADA'
+              : mode === 'attack'
+                ? 'ATACAR'
+                : 'DEFENDER'}
           </button>
         </footer>
       </div>

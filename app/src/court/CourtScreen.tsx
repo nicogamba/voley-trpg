@@ -5,13 +5,19 @@ import CourtCanvas from './CourtCanvas'
 import CourtCutIn from './CourtCutIn'
 import CourtDuelModal, { type DuelChoice } from './CourtDuelModal'
 import CourtSidebar from './CourtSidebar'
+import CourtReceptionModal from './CourtReceptionModal'
+import CourtSituationModal from './CourtSituationModal'
 import { primeAudio } from './audio'
+import { attackTell, defenseTell, serveTell } from './narration'
+import { TECHNIQUES } from './techniques'
 import { COURT, cellDistance, cellsOfSide, cellOrigin, sameCell, zoneOf } from './geometry'
 import type { LadderStage } from './ladder'
 import {
   attackCandidates,
   attackOptions,
   defenseCandidates,
+  playersOf,
+  schemeDefender,
   schemeHint,
   schemeLabel,
   type MatchEvent,
@@ -28,7 +34,7 @@ import {
   type EngineResult,
 } from './matchEngine'
 import { matchBeats } from './matchBeats'
-import { mulberry32, type Rng } from './matchAi'
+import { chooseServeTarget, mulberry32, type Rng } from './matchAi'
 import { TEAMS, buildRoster } from './teams'
 import { TeamBlock } from './TeamBadge'
 import type {
@@ -51,6 +57,7 @@ type Props = {
 type UiPhase =
   | 'setup'
   | 'moving'
+  | 'set'
   | 'serve'
   | 'attack'
   | 'defend'
@@ -138,6 +145,16 @@ const buildMoveScript = (move: Move): BeatSpec[] => {
   }
   return [beat]
 }
+
+const tellRng = (state: MatchState, salt: number): Rng =>
+  mulberry32(
+    (state.rallyNumber * 7919 +
+      state.score.home * 131 +
+      state.score.away * 17 +
+      (state.server === 'home' ? 1 : 2) +
+      salt) >>>
+      0,
+  )
 
 const cellPosition = (target: CourtCell) => {
   const origin = cellOrigin(target)
@@ -241,6 +258,103 @@ export const CourtScreen = ({
   const selected =
     roster.find((player) => player.id === selectedId) ?? null
 
+  const matchContext = `${teams.home.short} ${match.score.home}-${match.score.away} ${teams.away.short}`
+
+  const setter =
+    match.players.find(
+      (player) => player.side === 'home' && player.classId === 'setter',
+    ) ?? match.players.find((player) => player.side === 'home')
+
+  const awayServer =
+    match.players.find(
+      (player) => player.side === 'away' && player.classId === 'opposite',
+    ) ?? match.players.find((player) => player.side === 'away')
+
+  const receiveHint = useMemo(() => {
+    const rng = tellRng(match, 1)
+    const target = chooseServeTarget(match, rng)
+    const truthful = rng() < 0.68
+    const sendTarget = truthful
+      ? target
+      : cellsOfSide('home')[Math.min(11, Math.floor(rng() * 12))]
+    return {
+      text: `El saque apunta a la zona ${zoneOf(
+        'home',
+        sendTarget.row,
+        sendTarget.col,
+      )}.`,
+      truthful,
+    }
+  }, [match])
+
+  const serveHint = useMemo(
+    () => serveTell(match, tellRng(match, 2)),
+    [match],
+  )
+
+  const setTell = useMemo(
+    () =>
+      attackTell(
+        match.hiddenScheme ?? 'spread',
+        tellRng(match, 3),
+      ),
+    [match],
+  )
+
+  const setNarration = `${
+    setter?.name ?? 'El armador'
+  } tiene la pelota. ${
+    match.setQuality >= 2
+      ? 'El pase llegó limpio.'
+      : 'El pase quedó incómodo.'
+  } Elegí el juego.`
+
+  const defenseSchemeTell = useMemo(
+    () => defenseTell(match.hiddenAttack, tellRng(match, 4)),
+    [match],
+  )
+
+  const duelTell = useMemo(() => {
+    if (!duel) return null
+    return duel.mode === 'attack' ? setTell : defenseSchemeTell
+  }, [duel, setTell, defenseSchemeTell])
+
+  const duelRival = useMemo(() => {
+    if (!duel) return undefined
+    if (duel.mode === 'attack') {
+      const scheme = match.hiddenScheme ?? 'spread'
+      const player = schemeDefender(
+        playersOf(match, 'away'),
+        scheme,
+        duel.target,
+        duel.kind === 'quick',
+      ).player
+      return {
+        player,
+        label: schemeLabel(scheme),
+        detail: schemeHint(scheme),
+      }
+    }
+    const plan = match.hiddenAttack
+    if (!plan) return undefined
+    const player = match.players.find(
+      (candidate) => candidate.id === plan.attackerId,
+    )
+    if (!player) return undefined
+    return {
+      player,
+      label: plan.technique
+        ? TECHNIQUES[plan.technique].label
+        : ATTACK_LABEL[plan.kind],
+      detail: `ZONA ${zoneOf('home', plan.target.row, plan.target.col)}`,
+    }
+  }, [duel, match])
+
+  const duelNarration =
+    duel?.mode === 'attack'
+      ? 'El armado deja la pelota en el aire. El bloqueo se mueve.'
+      : 'El rival arma el ataque. Leé las manos.'
+
   const setupServer =
     roster.find((player) => player.id === SERVER_ID) ?? roster[0]
   const setupBall = setupServer.cell
@@ -261,7 +375,7 @@ export const CourtScreen = ({
   )
 
   const options = useMemo(
-    () => (ui === 'attack' ? attackOptions(match) : []),
+    () => (ui === 'attack' || ui === 'set' ? attackOptions(match) : []),
     [match, ui],
   )
 
@@ -311,7 +425,13 @@ export const CourtScreen = ({
     clearCutIn()
     clearStamp()
     const decision = nextDecision(next)
-    setUi(decision === 'end' ? 'ended' : decision)
+    setUi(
+      decision === 'end'
+        ? 'ended'
+        : decision === 'attack'
+          ? 'set'
+          : decision,
+    )
     setRunId((value) => value + 1)
   }
 
@@ -486,9 +606,11 @@ export const CourtScreen = ({
     )
   }
 
-  const continueAiServe = () => {
+  const continueAiServe = (receiverId: string) => {
     if (ui !== 'wait') return
-    run(() => aiServe(match, rngRef.current))
+    run(() =>
+      aiServe(match, rngRef.current, { receiverId }),
+    )
   }
 
   const captionText = (() => {
@@ -500,9 +622,12 @@ export const CourtScreen = ({
     if (ui === 'serve') {
       return `SAQUE · ${teams.home.short} · ELEGÍ LA ZONA`
     }
+    if (ui === 'set') return 'ARMADO · ELEGÍ EL JUEGO'
     if (ui === 'attack') return attackHint
-    if (ui === 'defend') return 'DEFENSA · ELEGÍ EL ESQUEMA'
-    if (ui === 'wait') return 'SAQUE RIVAL · CONTINUAR'
+    if (ui === 'defend') {
+      return `LECTURA · ${defenseSchemeTell.text}`
+    }
+    if (ui === 'wait') return 'SAQUE RIVAL · ELEGÍ LA RECEPCIÓN'
     if (ui === 'ended') {
       return won
         ? `¡${teams.home.name} GANA · ${match.score.home}-${match.score.away}!`
@@ -695,33 +820,32 @@ export const CourtScreen = ({
       )
     }
 
+    if (ui === 'set') {
+      return (
+        <div className="court-panel court-panel-single">
+          <div className="court-hint">ARMADO · ELEGÍ EL JUEGO</div>
+        </div>
+      )
+    }
+
     if (ui === 'attack') {
       return (
-        <div className="court-actions" role="group" aria-label="Elegí el ataque">
-          {options.map((option) => (
-            <button
-              key={option.kind}
-              type="button"
-              className={[
-                'court-action',
-                option.kind === attackKind ? 'is-selected' : '',
-                option.affordable ? '' : 'is-locked',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              aria-pressed={option.kind === attackKind}
-              disabled={!option.affordable}
-              onClick={() => {
-                setNotice(null)
-                setAttackKind((current) =>
-                  current === option.kind ? null : option.kind,
-                )
-              }}
-            >
-              <span>{ATTACK_LABEL[option.kind]}</span>
-              <b>{ATTACK_AP_COST[option.kind]}</b>
-            </button>
-          ))}
+        <div className="court-panel court-panel-single">
+          <div className="court-hint">
+            {attackKind
+              ? `ATAQUE · ${ATTACK_LABEL[attackKind]} · ELEGÍ LA ZONA`
+              : 'ATAQUE · ELEGÍ LA ZONA'}
+          </div>
+          <button
+            type="button"
+            className="pixel-btn ghost"
+            onClick={() => {
+              setAttackKind(null)
+              setUi('set')
+            }}
+          >
+            VOLVER AL ARMADO
+          </button>
         </div>
       )
     }
@@ -754,13 +878,7 @@ export const CourtScreen = ({
     if (ui === 'wait') {
       return (
         <div className="court-panel court-panel-single">
-          <button
-            type="button"
-            onClick={continueAiServe}
-            className="pixel-btn primary"
-          >
-            CONTINUAR · SAQUE RIVAL
-          </button>
+          <div className="court-hint">SAQUE RIVAL · ELEGÍ LA RECEPCIÓN</div>
         </div>
       )
     }
@@ -890,14 +1008,21 @@ export const CourtScreen = ({
           </div>
 
           <div className="court-caption-bar">
-            <p
-              className={`court-caption${
-                ui === 'ended' ? ' is-ended' : ''
-              }`}
-              aria-live="polite"
-            >
-              {captionText}
-            </p>
+            <div className="court-caption-text">
+              <p
+                className={`court-caption${
+                  ui === 'ended' ? ' is-ended' : ''
+                }`}
+                aria-live="polite"
+              >
+                {captionText}
+              </p>
+              {ui === 'serve' && (
+                <span className="court-caption-tell">
+                  PISTA · {serveHint.text}
+                </span>
+              )}
+            </div>
             <button
               type="button"
               className="court-chip court-chip-icon"
@@ -932,11 +1057,46 @@ export const CourtScreen = ({
         />
       </div>
 
+      {ui === 'wait' && !duel && awayServer && (
+        <CourtReceptionModal
+          players={homeRoster}
+          server={awayServer}
+          opponent={teams.away}
+          context={matchContext}
+          narration={`${awayServer.name} toma la pelota. ${teams.away.name} busca el hueco.`}
+          tell={receiveHint}
+          onConfirm={continueAiServe}
+        />
+      )}
+
+      {ui === 'set' && !duel && setter && (
+        <CourtSituationModal
+          actor={setter}
+          opponent={teams.away}
+          context={matchContext}
+          narration={setNarration}
+          tell={setTell}
+          ap={match.ap}
+          options={options.map((option) => ({
+            id: option.kind,
+            label: ATTACK_LABEL[option.kind],
+            note: `${option.cost} EN`,
+            disabled: !option.affordable,
+          }))}
+          onConfirm={(id) => {
+            setNotice(null)
+            setAttackKind(id as AttackKind)
+            setUi('attack')
+          }}
+        />
+      )}
+
       {duel && (
         <CourtDuelModal
           mode={duel.mode}
           players={duel.candidates}
           opponent={teams.away}
+          context={matchContext}
           label={duel.label}
           detail={duel.detail}
           resourceLabel={duel.mode === 'attack' ? 'ENERGÍA' : 'TÉCNICA'}
@@ -951,6 +1111,9 @@ export const CourtScreen = ({
           techniquesLocked={
             duel.mode === 'defense' && match.defenseTechniqueUsed
           }
+          narration={duelNarration}
+          tell={duelTell ?? undefined}
+          rival={duelRival}
           onCancel={() => setDuel(null)}
           onConfirm={confirmDuel}
         />

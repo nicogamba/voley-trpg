@@ -1,6 +1,7 @@
 import { ATTACK_LABEL } from '../engine'
 import type { AttackKind } from '../engine'
 import { cell, sameCell } from './geometry'
+import { qualityLabel } from './match'
 import { TECHNIQUES } from './techniques'
 import type { MatchEvent, MatchState } from './match'
 import type { CourtTeam } from './types'
@@ -175,7 +176,9 @@ export const matchBeats = (
         push({
           kind: 'receive',
           duration: 640,
-          caption: `RECEPCIÓN · ${playerName(receiver, 'DEFENSA')}`,
+          caption: event.quality === 0
+            ? `RECEPCIÓN MALA · ${playerName(receiver, 'DEFENSA')}`
+            : `RECEPCIÓN ${qualityLabel(event.quality).toUpperCase()} · ${playerName(receiver, 'DEFENSA')}`,
           actorId: event.playerId,
           pose: 'receive',
           fx: 'hit',
@@ -211,8 +214,14 @@ export const matchBeats = (
           duration: event.outcome === 'error' ? 760 : 600,
           caption:
             event.outcome === 'error'
-              ? `ARMADO FALLIDO · ${playerName(setter, 'ARMADOR')}`
-              : `ARMADO · ${playerName(setter, 'ARMADOR')}`,
+              ? `ARMADO MALO · ${playerName(setter, 'ARMADOR')}`
+              : `ARMADO ${
+                  event.quality === 3
+                    ? 'PERFECTO'
+                    : event.quality === 2
+                      ? 'BUENO'
+                      : 'MALO'
+                } · ${playerName(setter, 'ARMADOR')}`,
           actorId: event.setterId,
           pose: 'set',
           fx: event.outcome === 'error' ? 'floor' : undefined,
@@ -318,7 +327,10 @@ export const matchBeats = (
         push({
           kind: 'dig',
           duration: 760,
-          caption: `¡DEFENSA · ${playerName(defender, 'LÍBERO')}!`,
+          caption:
+            event.quality === 0
+              ? `DEFENSA MALA · ${playerName(defender, 'LÍBERO')}`
+              : `¡DEFENSA ${qualityLabel(event.quality).toUpperCase()} · ${playerName(defender, 'LÍBERO')}!`,
           actorId: event.defenderId,
           pose: 'dig',
           fx: 'hit',

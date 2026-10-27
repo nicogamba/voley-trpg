@@ -256,6 +256,10 @@ const autoSet = (
   return events
 }
 
+export type ReceptionChoice = {
+  receiverId?: string
+}
+
 export type AttackChoice = {
   attackerId?: string
   technique?: TechniqueId
@@ -275,6 +279,7 @@ export const serve = (
   state: MatchState,
   target: CourtCell,
   rng: Rng = Math.random,
+  choice: ReceptionChoice = {},
 ): EngineResult => {
   assert(state.phase === 'SERVE', 'No es la fase de saque.')
   assert(
@@ -300,9 +305,26 @@ export const serve = (
     return { state: next, events: [...events, ...awardPoint(next, next.server, 'ace')] }
   }
 
-  const quality = receptionQuality(result.value)
-  const from = { ...result.receiver.cell }
-  const setter = designatedSetter(next, otherSide(next.server), result.receiver.id)
+  const requested = choice.receiverId
+    ? playerById(next, choice.receiverId)
+    : undefined
+  const receivingSide = otherSide(next.server)
+  const requestedInReach =
+    requested &&
+    requested.side === receivingSide &&
+    cellDistance(requested.cell, target) <= SERVE_REACH
+  const receiver = requestedInReach ? requested : result.receiver
+  const value = requestedInReach
+    ? receptionValue({
+        player: receiver,
+        ballCell: target,
+        pressure: 1,
+        seam: result.seam,
+      })
+    : result.value - (requested ? 1 : 0)
+  const quality = receptionQuality(value)
+  const from = { ...receiver.cell }
+  const setter = designatedSetter(next, receivingSide, receiver.id)
 
   if (quality === 0) {
     const events: MatchEvent[] = [
@@ -310,7 +332,7 @@ export const serve = (
         type: 'SERVE',
         serverId: serverPlayer.id,
         target: { ...target },
-        receiverId: result.receiver.id,
+        receiverId: receiver.id,
         quality,
         outcome: 'error',
       },
@@ -318,11 +340,11 @@ export const serve = (
     return { state: next, events: [...events, ...awardPoint(next, next.server, 'error')] }
   }
 
-  movePlayer(next, result.receiver.id, target)
+  movePlayer(next, receiver.id, target)
   startPossession(
     next,
-    otherSide(next.server),
-    result.receiver.cell,
+    receivingSide,
+    receiver.cell,
     quality,
     MATCH_AP_SERVE + (quality === 3 ? MATCH_AP_REFUND : 0),
   )
@@ -332,26 +354,27 @@ export const serve = (
       type: 'SERVE',
       serverId: serverPlayer.id,
       target: { ...target },
-      receiverId: result.receiver.id,
+      receiverId: receiver.id,
       quality,
       outcome: 'ok',
     },
     {
       type: 'RECEIVE',
-      playerId: result.receiver.id,
+      playerId: receiver.id,
       from,
       to: { ...setter.cell },
       quality,
     },
   ]
 
-  return { state: next, events: [...events, ...autoSet(next, next.possession, result.receiver.id, rng)] }
+  return { state: next, events: [...events, ...autoSet(next, next.possession, receiver.id, rng)] }
 }
 
 export const aiServe = (
   state: MatchState,
   rng: Rng = Math.random,
-): EngineResult => serve(state, chooseServeTarget(state, rng), rng)
+  choice: ReceptionChoice = {},
+): EngineResult => serve(state, chooseServeTarget(state, rng), rng, choice)
 
 export const attack = (
   state: MatchState,

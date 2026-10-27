@@ -70,6 +70,28 @@ describe('motor de partido v2', () => {
     expect(beats[0].caption).toContain('SAQUE')
   })
 
+  it('permite elegir el receptor cuando la IA saca', () => {
+    const state = createMatch({
+      roster: DEMO_PLAYERS,
+      playerSide: 'home',
+      server: 'away',
+      targetScore: MATCH_TARGET,
+    })
+    const chosen = state.players.find(
+      (player) => player.id === 'home-setter',
+    )!
+    const target = cell('home', 1, 2)
+    chosen.cell = { ...target }
+    const result = serve(state, target, mulberry32(7), {
+      receiverId: chosen.id,
+    })
+    const event = result.events.find((entry) => entry.type === 'SERVE')
+    expect(event?.type).toBe('SERVE')
+    if (event?.type === 'SERVE') {
+      expect(event.receiverId).toBe(chosen.id)
+    }
+  })
+
   it('permite atacar con un jugador legal y aplica el costo de energía', () => {
     const pre = createMatch({
       roster: DEMO_PLAYERS,

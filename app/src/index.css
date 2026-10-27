@@ -1715,8 +1715,17 @@ button:disabled {
   border: 1px solid #2a3654;
 }
 
-.court-caption {
+.court-caption-text {
   flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.court-caption {
+  width: 100%;
   min-width: 0;
   margin: 0;
   font-size: 10px;
@@ -1727,6 +1736,43 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.court-caption-tell {
+  max-width: 100%;
+  font-size: 6px;
+  letter-spacing: 0.08em;
+  color: #9fb0d5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.court-defense-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.court-situation-line {
+  margin: 0;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: var(--paper);
+}
+
+.court-situation-line b {
+  margin-right: 4px;
+  font-size: 6px;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+}
+
+.court-tell-line {
+  margin: 0;
+  font-size: 6px;
+  letter-spacing: 0.06em;
+  color: #9fb0d5;
 }
 
 .court-caption.is-ended {
@@ -2031,8 +2077,129 @@ button:disabled {
   animation: court-duel-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
 
-.court-duel.is-defense {
+.court-duel.is-defense,
+.court-duel.is-set,
+.court-duel.is-reception {
   border-top-color: var(--cyan);
+}
+
+.court-duel.is-set .court-duel-kicker,
+.court-duel.is-set .court-duel-label {
+  color: var(--cyan);
+}
+
+.court-duel-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.court-duel-verdict {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 6px;
+  padding: 5px 7px;
+  background: #0a1020;
+  border: 1px solid #1b2740;
+}
+
+.court-duel-verdict span {
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+}
+
+.court-duel-verdict b {
+  min-width: 0;
+  font-size: 7px;
+  font-weight: 700;
+  color: var(--paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.court-duel.is-reveal {
+  border-top-color: var(--red);
+}
+
+.court-duel.is-reveal .court-duel-side.is-rival {
+  animation: court-reveal-rival 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.court-duel.is-reveal .court-duel-verdict {
+  animation: court-verdict 240ms ease-out both;
+}
+
+@keyframes court-reveal-rival {
+  0% {
+    opacity: 0;
+    transform: translateX(10px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes court-verdict {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.court-duel-context {
+  margin: 0;
+  text-align: center;
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #8fa4c8;
+}
+
+.court-duel-narration {
+  margin: 0;
+  padding: 6px 7px;
+  background: #0a1020;
+  border-left: 2px solid var(--gold);
+  font-size: 8px;
+  line-height: 1.45;
+  color: var(--paper);
+}
+
+.court-duel-tell {
+  margin: 0;
+  font-size: 7px;
+  line-height: 1.4;
+  color: #9fb0d5;
+}
+
+.court-duel-tell span {
+  margin-right: 4px;
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+}
+
+.court-duel-techs.is-plays {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.court-duel-pick {
+  align-self: center;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  text-align: center;
 }
 
 .court-duel::after {

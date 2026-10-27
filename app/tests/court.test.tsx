@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server'
 import CourtScreen from '../src/court/CourtScreen'
 import CourtCutIn from '../src/court/CourtCutIn'
 import CourtDuelModal from '../src/court/CourtDuelModal'
+import CourtReceptionModal from '../src/court/CourtReceptionModal'
 import LadderScreen from '../src/court/LadderScreen'
 import { LADDER, EMPTY_PROGRESS } from '../src/court/ladder'
 import {
@@ -303,6 +304,31 @@ describe('cut-in de duelo', () => {
     expect(html).toContain('MOLINA')
     expect(html).toContain('SOUZA')
     expect(html).toContain('VS')
+  })
+})
+
+describe('situación de recepción', () => {
+  it('muestra el saque rival, la pista y los candidatos con zona', () => {
+    const home = DEMO_PLAYERS.filter((player) => player.side === 'home')
+    const server = DEMO_PLAYERS.find(
+      (player) => player.side === 'away' && player.classId === 'opposite',
+    )!
+    const html = renderToString(
+      <CourtReceptionModal
+        players={home}
+        server={server}
+        opponent={DEMO_TEAMS.away}
+        narration="Soto toma la pelota."
+        tell={{ text: 'El saque apunta a la zona 9.', truthful: true }}
+        onConfirm={() => {}}
+      />,
+    )
+    expect(html).toContain('RECEPCIÓN')
+    expect(html).toContain('SAQUE RIVAL')
+    expect(html).toContain('El saque apunta a la zona 9.')
+    expect(html).toContain('SOSA')
+    expect(html).toContain('RECIBIR')
+    expect(html).toContain('Z')
   })
 })
 
