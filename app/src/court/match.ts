@@ -563,6 +563,43 @@ export const pickAttackerFor = (
   target: CourtCell,
 ): CourtPlayer | undefined => attackCandidates(state, kind, target)[0]
 
+/** El destino lo elige la jugada, no el dedo del jugador. */
+export const attackTargetFor = (
+  state: MatchState,
+  kind: AttackKind,
+): CourtCell => {
+  const side = state.possession
+  const attackers = playersOf(state, side)
+  const defenders = playersOf(state, otherSide(side))
+  const targets = cellsOfSide(otherSide(side)).filter((target) =>
+    attackers.some(
+      (attacker) => isAttackAllowed({ attacker, kind, target }).ok,
+    ),
+  )
+  if (targets.length === 0) {
+    return cellsOfSide(otherSide(side))[5]
+  }
+
+  const score = (target: CourtCell): number => {
+    const open = Math.min(
+      ...defenders.map((player) => cellDistance(player.cell, target)),
+    )
+    const corner = target.col === 0 || target.col === 3 ? 1 : 0
+    const deep = target.row === 0 ? 1 : 0
+    const center = target.col === 1 || target.col === 2 ? 1 : 0
+    if (kind === 'placement') return open * 2 + corner * 2
+    if (kind === 'tip') return (target.row === 2 ? 3 : 0) + open
+    return open * 1.2 + deep * 2 + center * 1.5
+  }
+
+  return targets.sort(
+    (a, b) =>
+      score(b) - score(a) ||
+      a.row - b.row ||
+      a.col - b.col,
+  )[0]
+}
+
 /** Jugadores que pueden ejecutar el esquema; sin revelar la zona rival. */
 export const defenseCandidates = (
   state: MatchState,

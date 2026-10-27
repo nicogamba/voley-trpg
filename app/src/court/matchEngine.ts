@@ -280,6 +280,7 @@ export const serve = (
   target: CourtCell,
   rng: Rng = Math.random,
   choice: ReceptionChoice = {},
+  pressure = 1,
 ): EngineResult => {
   assert(state.phase === 'SERVE', 'No es la fase de saque.')
   assert(
@@ -322,7 +323,7 @@ export const serve = (
         seam: result.seam,
       })
     : result.value - (requested ? 1 : 0)
-  const quality = receptionQuality(value)
+  const quality = receptionQuality(value - (pressure - 1))
   const from = { ...receiver.cell }
   const setter = designatedSetter(next, receivingSide, receiver.id)
 
@@ -375,6 +376,53 @@ export const aiServe = (
   rng: Rng = Math.random,
   choice: ReceptionChoice = {},
 ): EngineResult => serve(state, chooseServeTarget(state, rng), rng, choice)
+
+export type ServeType = 'power' | 'float' | 'short'
+
+const serveTargetForType = (
+  state: MatchState,
+  type: ServeType,
+): CourtCell => {
+  const side = otherSide(state.server)
+  const scored = cellsOfSide(side).map((target) => {
+    const result = receiverForServe(state, target)
+    const value = result?.value ?? -2
+    const seam = result?.seam ? 1 : 0
+    let score: number
+    if (type === 'power') {
+      score = -value + seam * 0.5
+    } else if (type === 'float') {
+      score = seam * 4 - value * 0.4
+    } else {
+      score = (target.row === 2 ? 4 : 0) + seam - value * 0.2
+    }
+    return { target, score }
+  })
+  scored.sort(
+    (a, b) =>
+      b.score - a.score ||
+      a.target.row - b.target.row ||
+      a.target.col - b.target.col,
+  )
+  return scored[0]?.target ?? cellsOfSide(side)[5]
+}
+
+/** Saque por tipo: el destino lo resuelve el sistema, no el jugador. */
+export const serveAuto = (
+  state: MatchState,
+  type: ServeType,
+  rng: Rng = Math.random,
+  choice: ReceptionChoice = {},
+): EngineResult => {
+  const target = serveTargetForType(state, type)
+  return serve(
+    state,
+    target,
+    rng,
+    choice,
+    type === 'power' ? 2 : 1,
+  )
+}
 
 export const attack = (
   state: MatchState,

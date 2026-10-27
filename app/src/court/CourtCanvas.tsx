@@ -244,24 +244,6 @@ const drawCourt = (
     ctx.fillRect(right + 2, y, 4, 9)
   }
 
-  // Grilla tenue para leer el movimiento.
-  ctx.strokeStyle = 'rgba(120, 150, 210, 0.08)'
-  ctx.lineWidth = 1
-  for (let col = 0; col <= 4; col += 1) {
-    const x = left + col * COURT.cellW + 0.5
-    ctx.beginPath()
-    ctx.moveTo(x, top)
-    ctx.lineTo(x, bottom)
-    ctx.stroke()
-  }
-  for (let row = 0; row <= 6; row += 1) {
-    const y = top + row * COURT.cellH + 0.5
-    ctx.beginPath()
-    ctx.moveTo(left, y)
-    ctx.lineTo(right, y)
-    ctx.stroke()
-  }
-
   // Líneas de cancha.
   ctx.strokeStyle = '#3a4a70'
   ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1)

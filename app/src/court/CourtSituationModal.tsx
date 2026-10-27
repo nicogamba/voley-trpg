@@ -29,10 +29,16 @@ export type SituationOption = {
 type Props = {
   actor: CourtPlayer
   opponent: CourtTeam
+  title: string
+  action: string
+  coreLabel: string
+  coreDetail: string
+  rivalLabel: string
+  rivalDetail: string
+  resource?: { label: string; value: string | number }
   context?: string
   narration: string
   tell: Tell
-  ap: number
   options: SituationOption[]
   onConfirm: (id: string) => void
 }
@@ -40,10 +46,16 @@ type Props = {
 export const CourtSituationModal = ({
   actor,
   opponent,
+  title,
+  action,
+  coreLabel,
+  coreDetail,
+  rivalLabel,
+  rivalDetail,
+  resource,
   context,
   narration,
   tell,
-  ap,
   options,
   onConfirm,
 }: Props) => {
@@ -62,8 +74,12 @@ export const CourtSituationModal = ({
       <div className="court-duel is-set">
         <header className="court-duel-head">
           <span className="court-duel-kicker">SITUACIÓN</span>
-          <strong>ARMADO</strong>
-          <span className="court-duel-ap">ENERGÍA {ap}</span>
+          <strong>{title}</strong>
+          {resource && (
+            <span className="court-duel-ap">
+              {resource.label} {resource.value}
+            </span>
+          )}
         </header>
 
         {context && <p className="court-duel-context">{context}</p>}
@@ -92,9 +108,9 @@ export const CourtSituationModal = ({
           </div>
 
           <div className="court-duel-core">
-            <span className="court-duel-label">ARMADO</span>
+            <span className="court-duel-label">{coreLabel}</span>
             <strong>VS</strong>
-            <span className="court-duel-detail">ELEGÍ EL JUEGO</span>
+            <span className="court-duel-detail">{coreDetail}</span>
           </div>
 
           <div className="court-duel-side is-rival">
@@ -103,8 +119,8 @@ export const CourtSituationModal = ({
               <Flag team={opponent} />
               <b>?</b>
             </span>
-            <b>BLOQUEO</b>
-            <small>LECTURA OCULTA</small>
+            <b>{rivalLabel}</b>
+            <small>{rivalDetail}</small>
           </div>
         </div>
 
@@ -140,7 +156,7 @@ export const CourtSituationModal = ({
             disabled={!selected}
             onClick={() => selected && onConfirm(selected.id)}
           >
-            ARMAR
+            {action}
           </button>
         </footer>
       </div>

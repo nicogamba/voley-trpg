@@ -90,6 +90,13 @@ export const zoneOf = (
 export const zoneLabel = (target: CourtCell): string =>
   `zona ${zoneOf(target.side, target.row, target.col)}`
 
+const ROW_AREA = ['FONDO', 'MEDIO', 'RED'] as const
+const COL_AREA = ['IZQ', 'C-I', 'C-D', 'DER'] as const
+
+/** Etiqueta de zona para relatos, sin numeración de tablero. */
+export const areaLabel = (target: CourtCell): string =>
+  `${ROW_AREA[target.row]} ${COL_AREA[target.col]}`
+
 export const allCells = (): CourtCell[] => [
   ...cellsOfSide('away'),
   ...cellsOfSide('home'),

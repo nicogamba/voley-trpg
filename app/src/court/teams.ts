@@ -125,6 +125,51 @@ const HOME_SLOT: Record<ClassId, { row: 0 | 1 | 2; col: 0 | 1 | 2 | 3 }> = {
   libero: { row: 2, col: 1 },
 }
 
+export type FormationId = 'base' | 'reception' | 'block'
+
+export const FORMATION_OPTIONS: {
+  id: FormationId
+  label: string
+  note: string
+}[] = [
+  { id: 'base', label: 'BASE', note: 'Equilibrada' },
+  { id: 'reception', label: 'RECEPCIÓN', note: 'Recibe y arma' },
+  { id: 'block', label: 'BLOQUEO', note: 'Cierra la red' },
+]
+
+const FORMATION_SLOTS: Record<
+  FormationId,
+  Record<ClassId, { row: 0 | 1 | 2; col: 0 | 1 | 2 | 3 }>
+> = {
+  base: HOME_SLOT,
+  reception: {
+    setter: { row: 2, col: 1 },
+    middle: { row: 0, col: 1 },
+    opposite: { row: 0, col: 2 },
+    libero: { row: 2, col: 2 },
+  },
+  block: {
+    setter: { row: 2, col: 0 },
+    middle: { row: 0, col: 1 },
+    opposite: { row: 0, col: 2 },
+    libero: { row: 2, col: 3 },
+  },
+}
+
+/** La formación mueve las piezas; el jugador ya no arrastra celdas. */
+export const applyFormation = (
+  players: CourtPlayer[],
+  formationId: FormationId,
+): CourtPlayer[] =>
+  players.map((player) => {
+    if (player.side !== 'home') return player
+    const slot = FORMATION_SLOTS[formationId][player.classId]
+    return {
+      ...player,
+      cell: cell('home', slot.row, slot.col),
+    }
+  })
+
 /**
  * Arma el plantel de un equipo. `boost` sube todas las stats por igual y
  * sirve para escalar la dificultad de la escalera.

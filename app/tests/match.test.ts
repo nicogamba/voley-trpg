@@ -5,6 +5,7 @@ import {
   MATCH_TARGET,
   attackCandidates,
   attackOptions,
+  attackTargetFor,
   defenseCandidates,
   isAttackAllowed,
   type MatchState,
@@ -17,6 +18,7 @@ import {
   legalServeTargets,
   nextDecision,
   serve,
+  serveAuto,
 } from '../src/court/matchEngine'
 import { matchBeats } from '../src/court/matchBeats'
 import { DEMO_TEAMS } from '../src/court/demo'
@@ -90,6 +92,28 @@ describe('motor de partido v2', () => {
     if (event?.type === 'SERVE') {
       expect(event.receiverId).toBe(chosen.id)
     }
+  })
+
+  it('elige un destino automático para el saque por tipo', () => {
+    const result = serveAuto(create(), 'power', mulberry32(13))
+    const event = result.events.find((entry) => entry.type === 'SERVE')
+    expect(event?.type).toBe('SERVE')
+    if (event?.type === 'SERVE') {
+      expect(event.target.side).toBe('away')
+    }
+  })
+
+  it('elige un destino automático y legal para el ataque', () => {
+    const state = create()
+    state.phase = 'ATTACK'
+    state.possession = 'home'
+    state.setQuality = 2
+    state.hiddenScheme = 'spread'
+    const target = attackTargetFor(state, 'placement')
+    expect(target.side).toBe('away')
+    expect(
+      attackCandidates(state, 'placement', target).length,
+    ).toBeGreaterThan(0)
   })
 
   it('permite atacar con un jugador legal y aplica el costo de energía', () => {

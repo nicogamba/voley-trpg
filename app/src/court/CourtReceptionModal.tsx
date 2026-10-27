@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import PixelPortrait from '../game/PixelPortrait'
 import { Flag } from './TeamBadge'
-import { zoneOf } from './geometry'
+import { areaLabel } from './geometry'
 import type { Tell } from './narration'
 import type { CourtPlayer, CourtTeam } from './types'
 import Typewriter from './Typewriter'
@@ -127,8 +127,7 @@ export const CourtReceptionModal = ({
               onClick={() => setSelectedId(player.id)}
             >
               <span>
-                {ROLE[player.classId]} · Z
-                {zoneOf('home', player.cell.row, player.cell.col)}
+                {ROLE[player.classId]} · {areaLabel(player.cell)}
               </span>
               <b>{player.name}</b>
             </button>
@@ -137,8 +136,7 @@ export const CourtReceptionModal = ({
 
         <footer className="court-duel-foot">
           <span className="court-duel-pick">
-            {selected.name} · {ROLE[selected.classId]} · Z
-            {zoneOf('home', selected.cell.row, selected.cell.col)}
+            {selected.name} · {ROLE[selected.classId]} · {areaLabel(selected.cell)}
           </span>
           <button
             type="button"
