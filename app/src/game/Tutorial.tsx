@@ -71,21 +71,17 @@ export const TitleScreen = ({
       <CourtMark />
 
       <div className="title-actions">
-        <button type="button" onClick={onTutorial} className="pixel-btn primary big">
-          <span className="blink-arrow">▶</span> JUGAR EL TUTORIAL
+        <button type="button" onClick={onCourt} className="pixel-btn primary big">
+          <span className="blink-arrow">▶</span> JUGAR V2 · CANCHA
         </button>
         <button type="button" onClick={onPlay} className="pixel-btn secondary">
-          PARTIDO RÁPIDO
+          PARTIDO RÁPIDO · V1
+        </button>
+        <button type="button" onClick={onTutorial} className="pixel-btn ghost">
+          TUTORIAL · V1
         </button>
         <button type="button" onClick={onHelp} className="pixel-btn ghost">
           CÓMO SE JUEGA
-        </button>
-        <button
-          type="button"
-          onClick={onCourt}
-          className="pixel-btn ghost prototype-btn"
-        >
-          CANCHA V2 · PROTOTIPO
         </button>
       </div>
     </div>

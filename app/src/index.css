@@ -993,17 +993,6 @@ button:disabled {
   color: #53617f;
 }
 
-.pixel-btn.prototype-btn {
-  font-size: 9px;
-  padding: 4px 6px;
-  letter-spacing: 0.14em;
-  background: #0c2430;
-  border: 2px solid #2e6f82;
-  color: var(--cyan);
-  box-shadow: 0 2px 0 #061017;
-  text-align: center;
-}
-
 .blink-arrow {
   color: #111;
   animation: blink 1s steps(2) infinite;
