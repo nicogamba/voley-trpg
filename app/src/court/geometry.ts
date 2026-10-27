@@ -73,6 +73,23 @@ export const cellsOfSide = (side: Side): CourtCell[] => {
   return result
 }
 
+/**
+ * Doce zonas por lado, numeradas de la red al fondo y de izquierda a
+ * derecha desde el propio campo. El rival ve la cancha girada 180°:
+ * su zona 1 es la 12 nuestra y su fila de fondo se lee 12-9.
+ */
+export const zoneOf = (
+  side: Side,
+  row: CourtRow,
+  col: CourtCol,
+): number => {
+  const ownCol = side === 'away' ? mirrorCol(col) : col
+  return row * COLS.length + ownCol + 1
+}
+
+export const zoneLabel = (target: CourtCell): string =>
+  `zona ${zoneOf(target.side, target.row, target.col)}`
+
 export const allCells = (): CourtCell[] => [
   ...cellsOfSide('away'),
   ...cellsOfSide('home'),

@@ -10,7 +10,7 @@ import {
   samplePlayer,
 } from '../src/court/choreography'
 import { DEMO_PLAYERS, DEMO_RALLY, INITIAL_BALL } from '../src/court/demo'
-import { cell, cellCenter, reaches } from '../src/court/geometry'
+import { cell, cellCenter, reaches, zoneLabel, zoneOf } from '../src/court/geometry'
 
 import type { BeatSpec } from '../src/court/types'
 
@@ -38,6 +38,39 @@ describe('geometría de la cancha v2', () => {
     expect(reaches(from, cell('home', 2, 2))).toBe(true)
     expect(reaches(from, cell('home', 0, 3))).toBe(false)
     expect(reaches(from, cell('away', 1, 1))).toBe(false)
+  })
+
+  it('numera doce zonas por lado desde la red hasta el fondo', () => {
+    expect(zoneOf('home', 0, 0)).toBe(1)
+    expect(zoneOf('home', 0, 3)).toBe(4)
+    expect(zoneOf('home', 1, 0)).toBe(5)
+    expect(zoneOf('home', 1, 3)).toBe(8)
+    expect(zoneOf('home', 2, 0)).toBe(9)
+    expect(zoneOf('home', 2, 3)).toBe(12)
+  })
+
+  it('gira la numeración del rival 180 grados', () => {
+    expect(zoneOf('away', 2, 0)).toBe(12)
+    expect(zoneOf('away', 2, 3)).toBe(9)
+    expect(zoneOf('away', 1, 0)).toBe(8)
+    expect(zoneOf('away', 1, 3)).toBe(5)
+    expect(zoneOf('away', 0, 0)).toBe(4)
+    expect(zoneOf('away', 0, 3)).toBe(1)
+  })
+
+  it('no repite zonas entre las 24 celdas', () => {
+    const home = new Set<number>()
+    const away = new Set<number>()
+    for (const row of [0, 1, 2] as const) {
+      for (const col of [0, 1, 2, 3] as const) {
+        home.add(zoneOf('home', row, col))
+        away.add(zoneOf('away', row, col))
+      }
+    }
+    expect(home.size).toBe(12)
+    expect(away.size).toBe(12)
+    expect(zoneLabel(cell('home', 2, 3))).toBe('zona 12')
+    expect(zoneLabel(cell('away', 0, 3))).toBe('zona 1')
   })
 })
 
@@ -177,6 +210,8 @@ describe('pantalla de cancha v2', () => {
     expect(html).toContain('A 5')
     expect(html).toContain('DEBUT')
     expect(html).toContain('court-canvas')
+    expect(html).toContain('Zona 1,')
+    expect(html).toContain('Zona 12')
   })
 })
 

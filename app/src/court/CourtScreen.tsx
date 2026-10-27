@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { ATTACK_AP_COST, ATTACK_LABEL } from '../engine'
 import type { AttackKind, DefenseScheme } from '../engine'
 import CourtCanvas from './CourtCanvas'
-import { COURT, cellDistance, cellsOfSide, cellOrigin, sameCell } from './geometry'
+import { COURT, cellDistance, cellsOfSide, cellOrigin, sameCell, zoneOf } from './geometry'
 import type { LadderStage } from './ladder'
 import {
   attackOptions,
@@ -184,7 +184,7 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
     selectedOption && attackKind
       ? `ATAQUE · ${ATTACK_LABEL[attackKind]} · ${
           selectedOption.attacker.name
-        } · ELEGÍ LA CELDA`
+        } · ELEGÍ LA ZONA`
       : 'ATAQUE · ELEGÍ EL GOLPE'
 
   const won = match.winner === 'home'
@@ -337,11 +337,11 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
   const captionText = (() => {
     if (notice) return notice
     if (ui === 'setup') {
-      return selected ? `${selected.name} · ELEGÍ UNA CELDA` : SETUP_HINT
+      return selected ? `${selected.name} · ELEGÍ UNA ZONA` : SETUP_HINT
     }
     if (ui === 'moving' && move) return `MUEVE · ${move.name}`
     if (ui === 'serve') {
-      return `SAQUE · ${teams.home.short} · ELEGÍ LA CELDA`
+      return `SAQUE · ${teams.home.short} · ELEGÍ LA ZONA`
     }
     if (ui === 'attack') return attackHint
     if (ui === 'defend') return 'DEFENSA · ELEGÍ EL ESQUEMA'
@@ -393,6 +393,7 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
         const occupant = roster.find((player) =>
           sameCell(player.cell, target),
         )
+        const zone = zoneOf('home', target.row, target.col)
         const isSelected = occupant?.id === selectedId
         const isDest =
           Boolean(selected) &&
@@ -414,10 +415,10 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
               .join(' ')}
             aria-label={
               occupant
-                ? `${occupant.name}, ${
+                ? `Zona ${zone}, ${occupant.name}, ${
                     isSelected ? 'seleccionado' : 'elegir para mover'
                   }`
-                : `Celda ${target.row + 1}-${target.col + 1}`
+                : `Zona ${zone}, libre${isDest ? ', destino' : ''}`
             }
             aria-pressed={isSelected}
             onClick={() => selectCell(target)}
@@ -431,20 +432,23 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
     <div
       className="court-hit-layer"
       role="group"
-      aria-label="Elegí la celda del saque"
+      aria-label="Elegí la zona del saque"
     >
-      {legalServeTargets(match).map((target) => (
-        <button
-          key={`${target.row}-${target.col}`}
-          type="button"
-          style={cellPosition(target)}
-          className="court-hit court-hit-valid court-hit-serve"
-          aria-label={`Sacar a fila ${target.row + 1}, columna ${
-            target.col + 1
-          }`}
-          onClick={() => commitServe(target)}
-        />
-      ))}
+      {legalServeTargets(match).map((target) => {
+        const zone = zoneOf('away', target.row, target.col)
+        return (
+          <button
+            key={`${target.row}-${target.col}`}
+            type="button"
+            style={cellPosition(target)}
+            className="court-hit court-hit-valid court-hit-serve"
+            aria-label={`Sacar a la zona ${zone}`}
+            onClick={() => commitServe(target)}
+          >
+            <span className="court-zone-tag">Z{zone}</span>
+          </button>
+        )
+      })}
     </div>
   )
 
@@ -454,12 +458,13 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
       <div
         className="court-hit-layer"
         role="group"
-        aria-label="Elegí la celda del ataque"
+        aria-label="Elegí la zona del ataque"
       >
         {cellsOfSide('away').map((target) => {
           const valid = selectedOption.targets.some((option) =>
             sameCell(option, target),
           )
+          const zone = zoneOf('away', target.row, target.col)
           return (
             <button
               key={`${target.row}-${target.col}`}
@@ -469,12 +474,16 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
                 'court-hit',
                 valid ? 'court-hit-valid court-hit-attack' : 'court-hit-off',
               ].join(' ')}
-              aria-label={`Atacar a fila ${target.row + 1}, columna ${
-                target.col + 1
+              aria-label={`Atacar a la zona ${zone}${
+                valid ? '' : ', no disponible'
               }`}
               disabled={!valid}
               onClick={() => commitAttack(target)}
-            />
+            >
+              {valid && (
+                <span className="court-zone-tag">Z{zone}</span>
+              )}
+            </button>
           )
         })}
       </div>
@@ -523,7 +532,7 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
       return (
         <div className="court-panel court-panel-single">
           <div className="court-hint">
-            TOCÁ UNA CELDA DEL RIVAL PARA SACAR
+            TOCÁ UNA ZONA DEL RIVAL PARA SACAR
           </div>
         </div>
       )
