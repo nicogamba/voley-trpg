@@ -219,8 +219,12 @@ const drawShadow = (
   height: number,
   alpha: number,
 ) => {
+  ctx.save()
   ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`
-  ctx.fillRect(x - width / 2, y - height / 2, width, height)
+  ctx.beginPath()
+  ctx.ellipse(x, y, width / 2, height / 2, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
 }
 
 const rect = (
@@ -537,6 +541,7 @@ export const CourtCanvas = ({
     const frame = (now: number) => {
       const t = Math.max(0, now - started)
       const beat = beatAt(timeline, t)
+      const live = beat && t >= beat.start && t < beat.end ? beat : null
       const ball = sampleBall(timeline, t)
       const active = beat?.caption ?? ''
 
@@ -563,7 +568,7 @@ export const CourtCanvas = ({
       samples.sort((a, b) => a.sample.groundY - b.sample.groundY)
 
       for (const { player, sample } of samples) {
-        const active = beat?.caption.includes(player.name) ?? false
+        const active = live?.caption.includes(player.name) ?? false
         const sheet = loadImage(sheetFor(teams[player.side].id, player.classId))
         if (sheet) {
           drawShadow(
@@ -617,7 +622,7 @@ export const CourtCanvas = ({
           player,
           sample.x,
           sample.groundY,
-          beat?.caption.includes(player.name) ?? false,
+          live?.caption.includes(player.name) ?? false,
         )
       }
 
