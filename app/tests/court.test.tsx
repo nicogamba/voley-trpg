@@ -11,6 +11,11 @@ import {
 } from '../src/court/choreography'
 import { DEMO_PLAYERS, DEMO_RALLY, INITIAL_BALL } from '../src/court/demo'
 import { cell, cellCenter, reaches, zoneLabel, zoneOf } from '../src/court/geometry'
+import {
+  BALL_SHEET,
+  PLAYER_SHEETS,
+  PORTRAITS,
+} from '../src/court/sprites'
 
 import type { BeatSpec } from '../src/court/types'
 
@@ -256,5 +261,29 @@ describe('escalera de países', () => {
     )
     expect(html).toContain('BRASIL')
     expect(html).toContain('JUGAR LA FINAL')
+  })
+})
+
+describe('arte de los jugadores', () => {
+  const teams = ['arg', 'chi', 'ita', 'jpn', 'usa', 'bra']
+  const classes = ['setter', 'middle', 'opposite', 'libero']
+
+  it('tiene una hoja por equipo y clase', () => {
+    expect(Object.keys(PLAYER_SHEETS)).toHaveLength(teams.length * classes.length)
+    for (const team of teams) {
+      for (const classId of classes) {
+        expect(PLAYER_SHEETS[`${team}-${classId}`]).toBeTruthy()
+      }
+    }
+    expect(BALL_SHEET).toBeTruthy()
+  })
+
+  it('tiene retratos para cada lado y clase', () => {
+    expect(Object.keys(PORTRAITS)).toHaveLength(8)
+    for (const side of ['home', 'away']) {
+      for (const classId of classes) {
+        expect(PORTRAITS[`${side}-${classId}`]).toBeTruthy()
+      }
+    }
   })
 })

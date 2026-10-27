@@ -1,0 +1,6 @@
+# Arte generado (fuente local, no se versiona)
+/art-source/
+
+# Python
+__pycache__/
+*.pyc

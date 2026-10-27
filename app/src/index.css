@@ -1227,6 +1227,19 @@ button:disabled {
   display: block;
 }
 
+.pixel-portrait-art {
+  display: block;
+  overflow: hidden;
+}
+
+.pixel-portrait-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
 .cutin-text {
   position: relative;
   flex: 0 0 auto;

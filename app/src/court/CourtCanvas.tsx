@@ -6,6 +6,7 @@ import {
   sampleBall,
   samplePlayer,
 } from './choreography'
+import { BALL_SHEET, loadImage, sheetFor } from './sprites'
 import type {
   BeatSpec,
   CourtCell,
@@ -27,6 +28,80 @@ const CLASS_LETTER: Record<CourtPlayer['classId'], string> = {
   middle: 'C',
   opposite: 'O',
   libero: 'L',
+}
+
+const ART_W = 48
+const ART_H = 58
+const ART_COLS = 5
+const ART_FEET = 56
+
+/**
+ * Frames de las hojas generadas. 0-1 reposo, 2-6 caminar/correr,
+ * 7-8 recepción, 9-10 y 14 bloqueo, 11-13 remate, 15-16 zambullida,
+ * 17-18 festejo.
+ */
+const artFrameFor = (pose: Pose, progress: number, time: number): number => {
+  switch (pose) {
+    case 'idle':
+      return Math.floor(time / 520) % 2
+    case 'run':
+      return 2 + (Math.floor(time / 90) % 5)
+    case 'jump':
+      return 13
+    case 'serve':
+      return progress < 0.55 ? 11 : 12
+    case 'receive':
+      return progress < 0.5 ? 7 : 8
+    case 'set':
+      return progress < 0.5 ? 9 : 10
+    case 'spike':
+      return progress < 0.42 ? 11 : progress < 0.8 ? 12 : 13
+    case 'dig':
+      return progress < 0.55 ? 15 : 16
+    case 'block':
+      return [9, 10, 14][Math.floor(time / 140) % 3]
+    case 'celebrate':
+      return 17 + (Math.floor(time / 220) % 2)
+  }
+}
+
+const drawArtPlayer = (
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  frame: number,
+  x: number,
+  groundY: number,
+  jump: number,
+) => {
+  const col = frame % ART_COLS
+  const row = Math.floor(frame / ART_COLS)
+  const dx = Math.round(x - ART_W / 2)
+  const dy = Math.round(groundY - jump - ART_H + (ART_H - ART_FEET))
+  ctx.drawImage(
+    image,
+    col * ART_W,
+    row * ART_H,
+    ART_W,
+    ART_H,
+    dx,
+    dy,
+    ART_W,
+    ART_H,
+  )
+}
+
+const drawActiveRing = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  groundY: number,
+) => {
+  ctx.save()
+  ctx.strokeStyle = '#ffd166'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.ellipse(x, groundY + 1, 12, 4, 0, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.restore()
 }
 
 const SKIN = '#e8b98a'
@@ -167,6 +242,7 @@ const drawBall = (
   z: number,
   time: number,
   phase: number,
+  art: HTMLImageElement | null,
 ) => {
   const shadowScale = Math.max(0.35, 1 - z / 110)
   drawShadow(
@@ -177,6 +253,22 @@ const drawBall = (
     4 * shadowScale,
     0.42,
   )
+
+  if (art) {
+    const frame = ((phase % 4) + 4) % 4
+    ctx.drawImage(
+      art,
+      frame * 16,
+      0,
+      16,
+      16,
+      Math.round(x - 8),
+      Math.round(groundY - z - 16),
+      16,
+      16,
+    )
+    return
+  }
 
   const ballX = Math.round(x - 4)
   const ballY = Math.round(groundY - z - 8)
@@ -459,6 +551,7 @@ export const CourtCanvas = ({
       }
 
       ctx.save()
+      ctx.imageSmoothingEnabled = false
       ctx.clearRect(0, 0, COURT.width, COURT.height)
       ctx.translate(shakeX, shakeY)
       drawCourt(ctx)
@@ -470,19 +563,41 @@ export const CourtCanvas = ({
       samples.sort((a, b) => a.sample.groundY - b.sample.groundY)
 
       for (const { player, sample } of samples) {
-        drawPlayer(
-          ctx,
-          player,
-          teams[player.side].kit,
-          sample.x,
-          sample.groundY,
-          sample.jump,
-          sample.pose,
-          t,
-          beat?.caption.includes(player.name) ?? false,
-          sample.progress,
-          sample.moving,
-        )
+        const active = beat?.caption.includes(player.name) ?? false
+        const sheet = loadImage(sheetFor(teams[player.side].id, player.classId))
+        if (sheet) {
+          drawShadow(
+            ctx,
+            sample.x,
+            sample.groundY + 1,
+            sample.jump > 4 ? 16 : 20,
+            5,
+            0.42,
+          )
+          drawArtPlayer(
+            ctx,
+            sheet,
+            artFrameFor(sample.pose, sample.progress, t),
+            sample.x,
+            sample.groundY,
+            sample.jump,
+          )
+          if (active) drawActiveRing(ctx, sample.x, sample.groundY)
+        } else {
+          drawPlayer(
+            ctx,
+            player,
+            teams[player.side].kit,
+            sample.x,
+            sample.groundY,
+            sample.jump,
+            sample.pose,
+            t,
+            active,
+            sample.progress,
+            sample.moving,
+          )
+        }
         if (
           (sample.pose === 'dig' && sample.progress > 0.32) ||
           (sample.pose === 'spike' && sample.progress > 0.94)
@@ -542,6 +657,7 @@ export const CourtCanvas = ({
         ball.z,
         t,
         spinPhase,
+        loadImage(BALL_SHEET),
       )
 
       if (
