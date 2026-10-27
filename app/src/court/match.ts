@@ -50,6 +50,28 @@ export type DuelResolution = {
 export type AttackRecord = { side: Side; kind: AttackKind }
 export type DefenseRecord = { side: Side; scheme: DefenseScheme }
 
+/** Ajuste de la IA rival; la escalera lo sube etapa por etapa. */
+export type AiTuning = {
+  /** Margen por debajo del mejor plan que la IA acepta. */
+  tolerance: number
+  /** Probabilidad de jugar un plan al azar. */
+  noise: number
+  /** Peso de cada ataque visto al elegir el esquema defensivo. */
+  adapt: number
+  /** Ruido del esquema defensivo. */
+  jitter: number
+  /** Energía extra (o de menos) con la que arranca el rival cada rally. */
+  apBonus: number
+}
+
+export const AI_STANDARD: AiTuning = {
+  tolerance: 2.2,
+  noise: 0.12,
+  adapt: 0.4,
+  jitter: 0.55,
+  apBonus: 0,
+}
+
 export type MatchState = {
   phase: MatchPhase
   playerSide: Side
@@ -70,6 +92,7 @@ export type MatchState = {
   hiddenAttack: AttackPlan | null
   winner: Side | null
   targetScore: number
+  ai: AiTuning
   rallyNumber: number
   rallyAttacks: number
   attackHistory: AttackRecord[]

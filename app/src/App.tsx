@@ -3,6 +3,15 @@ import Board from './game/Board'
 import CommandMenu from './game/CommandMenu'
 import DuelCutIn from './game/DuelCutIn'
 import CourtScreen from './court/CourtScreen'
+import LadderScreen from './court/LadderScreen'
+import {
+  EMPTY_PROGRESS,
+  loadProgress,
+  recordResult,
+  saveProgress,
+  stageAt,
+  type LadderProgress,
+} from './court/ladder'
 import { isPlayerTurn, useGame } from './game/store'
 import {
   Coach,
@@ -72,7 +81,10 @@ const App = () => {
 
   const [attackKind, setAttackKind] = useState<AttackKind | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [courtOpen, setCourtOpen] = useState(false)
+  const [courtScreen, setCourtScreen] = useState<'none' | 'ladder' | 'match'>(
+    'none',
+  )
+  const [ladder, setLadder] = useState<LadderProgress>(loadProgress)
 
   const playerTurn = isPlayerTurn(game)
   const tells = useMemo(() => tellsFor(game), [game])
@@ -177,8 +189,38 @@ const App = () => {
     }
   }
 
-  if (courtOpen) {
-    return <CourtScreen onBack={() => setCourtOpen(false)} />
+  if (courtScreen === 'match') {
+    const stage = stageAt(ladder)
+    if (stage) {
+      return (
+        <CourtScreen
+          key={stage.id}
+          stage={stage}
+          onBack={() => setCourtScreen('ladder')}
+          onFinish={(won) => {
+            const next = recordResult(ladder, won)
+            setLadder(next)
+            saveProgress(next)
+            setCourtScreen('ladder')
+          }}
+        />
+      )
+    }
+    setCourtScreen('ladder')
+  }
+
+  if (courtScreen === 'ladder') {
+    return (
+      <LadderScreen
+        progress={ladder}
+        onPlay={() => setCourtScreen('match')}
+        onBack={() => setCourtScreen('none')}
+        onReset={() => {
+          setLadder(EMPTY_PROGRESS)
+          saveProgress(EMPTY_PROGRESS)
+        }}
+      />
+    )
   }
 
   if (screen === 'title') {
@@ -196,7 +238,7 @@ const App = () => {
           }}
           onToggleMuted={toggleMuted}
           onHelp={() => setHelpOpen(true)}
-          onCourt={() => setCourtOpen(true)}
+          onCourt={() => setCourtScreen('ladder')}
         />
         {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       </>

@@ -119,7 +119,9 @@ const schemeWeightsFor = (
   const recent = state.defenseHistory
     .filter((record) => record.side === defendingSide)
     .slice(-8)
-  for (const record of recent) weights[record.scheme] += 0.4
+  for (const record of recent) {
+    weights[record.scheme] += 0.4 * state.ai.adapt
+  }
   return weights
 }
 
@@ -139,12 +141,17 @@ export const chooseDefenseScheme = (
   for (const record of recent) {
     for (const scheme of Object.keys(weights) as DefenseScheme[]) {
       const edge = SCHEME_EDGE[scheme][record.kind]
-      if (edge > 0) weights[scheme] += 0.4
-      if (edge < 0) weights[scheme] = Math.max(0.4, weights[scheme] - 0.15)
+      if (edge > 0) weights[scheme] += 0.4 * state.ai.adapt
+      if (edge < 0) {
+        weights[scheme] = Math.max(
+          0.4,
+          weights[scheme] - 0.15 * state.ai.adapt,
+        )
+      }
     }
   }
   for (const scheme of Object.keys(weights) as DefenseScheme[]) {
-    weights[scheme] += rng() * 0.55
+    weights[scheme] += rng() * state.ai.jitter
   }
   return pickWeighted(
     (Object.keys(weights) as DefenseScheme[]).map((scheme) => ({
@@ -244,9 +251,18 @@ export const chooseAttackPlan = (
     const target = cellsOfSide(otherSide(state.possession))[5]
     return { attackerId: attacker.id, kind: 'placement', target }
   }
-  if (rng() < 0.12) return (({ attackerId, kind, target }) => ({ attackerId, kind, target }))(pick(plans, rng))
+  if (rng() < state.ai.noise) {
+    const wild = pick(plans, rng)
+    return {
+      attackerId: wild.attackerId,
+      kind: wild.kind,
+      target: { ...wild.target },
+    }
+  }
   const maximum = Math.max(...plans.map((plan) => plan.score))
-  const pool = plans.filter((plan) => maximum - plan.score <= 2.2)
+  const pool = plans.filter(
+    (plan) => maximum - plan.score <= state.ai.tolerance,
+  )
   const chosen = pick(pool, rng)
   return {
     attackerId: chosen.attackerId,

@@ -1,11 +1,10 @@
 import { ATTACK_LABEL } from '../engine'
 import type { AttackKind } from '../engine'
 import { cell, sameCell } from './geometry'
-import { DEMO_TEAMS } from './demo'
 import type { MatchEvent, MatchState } from './match'
+import type { CourtTeam } from './types'
 import type { BeatSpec, CourtCell, CourtPlayer, MoveSpec, Pose, Side } from './types'
 
-const teamName = (side: Side): string => DEMO_TEAMS[side].name
 
 const playerName = (player: CourtPlayer | undefined, fallback: string): string =>
   player?.name ?? fallback
@@ -20,7 +19,9 @@ export const matchBeats = (
   pre: MatchState,
   events: MatchEvent[],
   post: MatchState,
+  teams: Record<Side, CourtTeam>,
 ): BeatSpec[] => {
+  const teamName = (side: Side): string => teams[side].name
   const beats: BeatSpec[] = []
   const roster = new Map(pre.players.map((player) => [player.id, player]))
   const at: Record<string, CourtCell> = Object.fromEntries(

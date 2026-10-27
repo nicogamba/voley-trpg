@@ -17,6 +17,7 @@ import {
   serve,
 } from '../src/court/matchEngine'
 import { matchBeats } from '../src/court/matchBeats'
+import { DEMO_TEAMS } from '../src/court/demo'
 import { mulberry32 } from '../src/court/matchAi'
 
 const create = () =>
@@ -59,7 +60,7 @@ describe('motor de partido v2', () => {
   it('traduce el saque a beats con pelota, recepción y armado', () => {
     const pre = create()
     const result = serve(pre, cell('away', 1, 2), mulberry32(2))
-    const beats = matchBeats(pre, result.events, result.state)
+    const beats = matchBeats(pre, result.events, result.state, DEMO_TEAMS)
     expect(beats.map((beat) => beat.kind)).toEqual(
       expect.arrayContaining(['serve', 'receive', 'set']),
     )

@@ -77,9 +77,16 @@ export type BeatSpec = {
   point?: Side
 }
 
+export type TeamKit = {
+  shirt: string
+  shorts: string
+  trim: string
+}
+
 export type CourtTeam = {
   id: string
   name: string
   short: string
   flag: [string, string, string]
+  kit: TeamKit
 }

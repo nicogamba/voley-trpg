@@ -2,14 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 import { ATTACK_AP_COST, ATTACK_LABEL } from '../engine'
 import type { AttackKind, DefenseScheme } from '../engine'
 import CourtCanvas from './CourtCanvas'
-import { DEMO_PLAYERS, DEMO_TEAMS } from './demo'
-import {
-  COURT,
-  cellDistance,
-  cellsOfSide,
-  cellOrigin,
-  sameCell,
-} from './geometry'
+import { COURT, cellDistance, cellsOfSide, cellOrigin, sameCell } from './geometry'
+import type { LadderStage } from './ladder'
 import {
   attackOptions,
   type MatchEvent,
@@ -27,6 +21,8 @@ import {
 } from './matchEngine'
 import { matchBeats } from './matchBeats'
 import { mulberry32, type Rng } from './matchAi'
+import { TEAMS, buildRoster } from './teams'
+import { TeamBlock } from './TeamBadge'
 import type {
   BeatSpec,
   CourtCell,
@@ -36,7 +32,9 @@ import type {
 } from './types'
 
 type Props = {
+  stage: LadderStage
   onBack: () => void
+  onFinish: (won: boolean) => void
 }
 
 type UiPhase =
@@ -64,15 +62,26 @@ type Animation = {
 }
 
 const SERVER_ID = 'home-opposite'
-const HOME_CELLS = cellsOfSide('home')
-const EMPTY_SCRIPT: BeatSpec[] = []
 const SETUP_HINT = 'ORDENÁ · TOCÁ UN JUGADOR'
 
-const cloneRoster = (): CourtPlayer[] =>
-  DEMO_PLAYERS.map((player) => ({
+const cloneCell = (target: CourtCell): CourtCell => ({ ...target })
+
+const cloneRoster = (players: CourtPlayer[]): CourtPlayer[] =>
+  players.map((player) => ({
     ...player,
-    cell: { ...player.cell },
+    stats: { ...player.stats },
+    cell: cloneCell(player.cell),
   }))
+
+const buildTeams = (stage: LadderStage): Record<Side, CourtTeam> => ({
+  home: TEAMS.arg,
+  away: TEAMS[stage.rival],
+})
+
+const buildSetupRoster = (stage: LadderStage): CourtPlayer[] => [
+  ...buildRoster('arg', 'home'),
+  ...buildRoster(stage.rival, 'away', stage.boost, stage.techBoost),
+]
 
 const buildMoveScript = (move: Move): BeatSpec[] => {
   const beat: BeatSpec = {
@@ -100,24 +109,6 @@ const buildMoveScript = (move: Move): BeatSpec[] => {
   return [beat]
 }
 
-const Flag = ({ team }: { team: CourtTeam }) => (
-  <span className="court-flag" aria-hidden="true">
-    {team.flag.map((color, index) => (
-      <span key={index} style={{ background: color }} />
-    ))}
-  </span>
-)
-
-const TeamBlock = ({ team, side }: { team: CourtTeam; side: Side }) => (
-  <div className={`court-team court-team-${side}`}>
-    <Flag team={team} />
-    <div className="court-team-text">
-      <span className="court-team-code">{team.short}</span>
-      <span className="court-team-name">{team.name}</span>
-    </div>
-  </div>
-)
-
 const cellPosition = (target: CourtCell) => {
   const origin = cellOrigin(target)
   return {
@@ -128,23 +119,18 @@ const cellPosition = (target: CourtCell) => {
   }
 }
 
-const serveCaption = (state: MatchState): string =>
-  `SAQUE · ${DEMO_TEAMS[state.server].short} · ELEGÍ LA CELDA`
-
-const defenseCaption = (): string => 'DEFENSA · ELEGÍ EL ESQUEMA'
-
-const endedCaption = (state: MatchState): string =>
-  state.winner
-    ? `¡${DEMO_TEAMS[state.winner].name} GANA EL SET · ${state.score.home}-${state.score.away}!`
-    : 'FIN DEL SET'
-
-export const CourtScreen = ({ onBack }: Props) => {
-  const [roster, setRoster] = useState<CourtPlayer[]>(cloneRoster)
+export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
+  const teams = useMemo(() => buildTeams(stage), [stage])
+  const [roster, setRoster] = useState<CourtPlayer[]>(() =>
+    buildSetupRoster(stage),
+  )
   const [match, setMatch] = useState<MatchState>(() =>
     createMatch({
-      roster: cloneRoster(),
+      roster: buildSetupRoster(stage),
       playerSide: 'home',
       server: 'home',
+      targetScore: stage.targetScore,
+      ai: stage.ai,
     }),
   )
   const [ui, setUi] = useState<UiPhase>('setup')
@@ -161,6 +147,8 @@ export const CourtScreen = ({ onBack }: Props) => {
   const [attackKind, setAttackKind] = useState<AttackKind | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const rngRef = useRef<Rng>(mulberry32(0x20261027))
+
+  const homeCells = useMemo(() => cellsOfSide('home'), [])
 
   const selected =
     roster.find((player) => player.id === selectedId) ?? null
@@ -180,7 +168,7 @@ export const CourtScreen = ({ onBack }: Props) => {
   }, [move, roster])
 
   const moveScript = useMemo(
-    () => (move ? buildMoveScript(move) : EMPTY_SCRIPT),
+    () => (move ? buildMoveScript(move) : []),
     [move],
   )
 
@@ -199,13 +187,17 @@ export const CourtScreen = ({ onBack }: Props) => {
         } · ELEGÍ LA CELDA`
       : 'ATAQUE · ELEGÍ EL GOLPE'
 
+  const won = match.winner === 'home'
+
   const beginMatch = (formation: CourtPlayer[]) => {
     const fresh = createMatch({
-      roster: formation,
+      roster: cloneRoster(formation),
       playerSide: 'home',
       server: 'home',
+      targetScore: stage.targetScore,
+      ai: stage.ai,
     })
-    setRoster(formation)
+    setRoster(cloneRoster(formation))
     setMatch(fresh)
     setShownScore(fresh.score)
     setAnimation(null)
@@ -232,7 +224,7 @@ export const CourtScreen = ({ onBack }: Props) => {
   }
 
   const play = (result: EngineResult) => {
-    const beats = matchBeats(match, result.events, result.state)
+    const beats = matchBeats(match, result.events, result.state, teams)
     if (beats.length === 0) {
       applyPost(result.state)
       return
@@ -316,7 +308,7 @@ export const CourtScreen = ({ onBack }: Props) => {
   }
 
   const resetPositions = () => {
-    setRoster(cloneRoster())
+    setRoster(buildSetupRoster(stage))
     setSelectedId(null)
     setMove(null)
     setSetupSeq((value) => value + 1)
@@ -348,11 +340,17 @@ export const CourtScreen = ({ onBack }: Props) => {
       return selected ? `${selected.name} · ELEGÍ UNA CELDA` : SETUP_HINT
     }
     if (ui === 'moving' && move) return `MUEVE · ${move.name}`
-    if (ui === 'serve') return serveCaption(match)
+    if (ui === 'serve') {
+      return `SAQUE · ${teams.home.short} · ELEGÍ LA CELDA`
+    }
     if (ui === 'attack') return attackHint
-    if (ui === 'defend') return defenseCaption()
+    if (ui === 'defend') return 'DEFENSA · ELEGÍ EL ESQUEMA'
     if (ui === 'wait') return 'SAQUE RIVAL · CONTINUAR'
-    if (ui === 'ended') return endedCaption(match)
+    if (ui === 'ended') {
+      return won
+        ? `¡${teams.home.name} GANA · ${match.score.home}-${match.score.away}!`
+        : `¡${teams.away.name} GANA · ${match.score.home}-${match.score.away}!`
+    }
     return caption
   })()
 
@@ -377,7 +375,7 @@ export const CourtScreen = ({ onBack }: Props) => {
     ? animation.beats
     : ui === 'moving'
       ? moveScript
-      : EMPTY_SCRIPT
+      : []
 
   const canvasBall = animation
     ? animation.pre.ball
@@ -391,7 +389,7 @@ export const CourtScreen = ({ onBack }: Props) => {
       role="group"
       aria-label="Ordená tus jugadores"
     >
-      {HOME_CELLS.map((target) => {
+      {homeCells.map((target) => {
         const occupant = roster.find((player) =>
           sameCell(player.cell, target),
         )
@@ -606,13 +604,15 @@ export const CourtScreen = ({ onBack }: Props) => {
         <div className="court-panel">
           <button
             type="button"
-            onClick={() => beginMatch(roster)}
+            onClick={() =>
+              won ? onFinish(true) : beginMatch(roster)
+            }
             className="pixel-btn primary"
           >
-            ↻ REVANCHA
+            {won ? 'SIGUIENTE ▶' : '↻ REINTENTAR'}
           </button>
           <button type="button" onClick={onBack} className="pixel-btn ghost">
-            VOLVER
+            SALIR
           </button>
         </div>
       )
@@ -630,7 +630,7 @@ export const CourtScreen = ({ onBack }: Props) => {
   return (
     <div className="court-shell scanlines">
       <header className="court-hud">
-        <TeamBlock team={DEMO_TEAMS.home} side="home" />
+        <TeamBlock team={teams.home} side="home" />
 
         <div className="court-score">
           <div className="court-score-line">
@@ -638,7 +638,9 @@ export const CourtScreen = ({ onBack }: Props) => {
             <span className="court-score-sep">×</span>
             <span className="court-score-num">{shownScore.away}</span>
           </div>
-          <p className="court-score-label">SET A 7 · V2</p>
+          <p className="court-score-label">
+            {`A ${stage.targetScore} · ${stage.round}`}
+          </p>
           <div
             className={`court-energy${
               match.possession !== match.playerSide ? ' is-rival' : ''
@@ -653,7 +655,7 @@ export const CourtScreen = ({ onBack }: Props) => {
           </div>
         </div>
 
-        <TeamBlock team={DEMO_TEAMS.away} side="away" />
+        <TeamBlock team={teams.away} side="away" />
       </header>
 
       <div className="court-stage">
@@ -664,6 +666,7 @@ export const CourtScreen = ({ onBack }: Props) => {
               players={canvasPlayers}
               script={canvasScript}
               initialBall={canvasBall}
+              teams={teams}
               onCaption={setCaption}
               onPoint={animation ? handlePoint : undefined}
               onEnd={

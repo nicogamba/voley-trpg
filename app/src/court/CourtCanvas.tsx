@@ -6,20 +6,14 @@ import {
   sampleBall,
   samplePlayer,
 } from './choreography'
-import type { BeatSpec, CourtCell, CourtPlayer, Pose, Side } from './types'
-
-const TEAM_COLORS = {
-  home: {
-    shirt: '#3e63c7',
-    shorts: '#223a7a',
-    trim: '#9db8ff',
-  },
-  away: {
-    shirt: '#b3344b',
-    shorts: '#7a2030',
-    trim: '#ff9cae',
-  },
-} as const
+import type {
+  BeatSpec,
+  CourtCell,
+  CourtPlayer,
+  CourtTeam,
+  Pose,
+  Side,
+} from './types'
 
 const CLASS_ACCENT: Record<CourtPlayer['classId'], string> = {
   setter: '#65d68a',
@@ -43,6 +37,7 @@ type Props = {
   players: CourtPlayer[]
   script: BeatSpec[]
   initialBall: CourtCell
+  teams: Record<Side, CourtTeam>
   onCaption: (caption: string) => void
   onPoint?: (side: Side) => void
   onEnd?: () => void
@@ -196,6 +191,7 @@ const drawBall = (
 const drawPlayer = (
   ctx: CanvasRenderingContext2D,
   player: CourtPlayer,
+  kit: CourtTeam['kit'],
   x: number,
   groundY: number,
   jump: number,
@@ -203,7 +199,7 @@ const drawPlayer = (
   time: number,
   active: boolean,
 ) => {
-  const team = TEAM_COLORS[player.side]
+  const team = kit
   const accent = CLASS_ACCENT[player.classId]
   let feet = groundY - jump
   const bob = pose === 'idle' ? Math.sin(time * 0.004 + x) * 0.9 : 0
@@ -342,6 +338,7 @@ export const CourtCanvas = ({
   players,
   script,
   initialBall,
+  teams,
   onCaption,
   onPoint,
   onEnd,
@@ -405,6 +402,7 @@ export const CourtCanvas = ({
         drawPlayer(
           ctx,
           player,
+          teams[player.side].kit,
           sample.x,
           sample.groundY,
           sample.jump,
@@ -506,7 +504,7 @@ export const CourtCanvas = ({
 
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [timeline, players, script])
+  }, [timeline, players, script, teams])
 
   return (
     <canvas
@@ -514,7 +512,7 @@ export const CourtCanvas = ({
       width={COURT.width}
       height={COURT.height}
       className="court-canvas"
-      aria-label="Cancha de vóley animada. Argentina contra Brasil."
+      aria-label={`Cancha de vóley animada. ${teams.home.name} contra ${teams.away.name}.`}
     />
   )
 }

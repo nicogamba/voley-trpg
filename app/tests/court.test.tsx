@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import CourtScreen from '../src/court/CourtScreen'
+import LadderScreen from '../src/court/LadderScreen'
+import { LADDER, EMPTY_PROGRESS } from '../src/court/ladder'
 import {
   beatAt,
   buildTimeline,
@@ -158,14 +160,66 @@ describe('coreografía del rally demo', () => {
 
 describe('pantalla de cancha v2', () => {
   it('renderiza HUD, caption y controles', () => {
-    const html = renderToString(<CourtScreen onBack={() => {}} />)
+    const html = renderToString(
+      <CourtScreen
+        stage={LADDER[0]}
+        onBack={() => {}}
+        onFinish={() => {}}
+      />,
+    )
     expect(html).toContain('ARG')
-    expect(html).toContain('BRA')
+    expect(html).toContain('CHI')
+    expect(html).toContain('CHILE')
     expect(html).toContain('EMPEZAR PARTIDO')
     expect(html).toContain('REINICIAR')
     expect(html).toContain('VOLVER')
     expect(html).toContain('ORDENÁ')
-    expect(html).toContain('SET A 7')
+    expect(html).toContain('A 5')
+    expect(html).toContain('DEBUT')
     expect(html).toContain('court-canvas')
+  })
+})
+
+describe('escalera de países', () => {
+  it('muestra la primera etapa y el plantel rival', () => {
+    const html = renderToString(
+      <LadderScreen
+        progress={EMPTY_PROGRESS}
+        onPlay={() => {}}
+        onBack={() => {}}
+        onReset={() => {}}
+      />,
+    )
+    expect(html).toContain('GIRA MUNDIAL')
+    expect(html).toContain('ETAPA 1/5')
+    expect(html).toContain('CHILE')
+    expect(html).toContain('GRIMALT')
+    expect(html).toContain('JUGAR CON CHI')
+  })
+
+  it('corona la gira al completar las cinco etapas', () => {
+    const html = renderToString(
+      <LadderScreen
+        progress={{ stage: LADDER.length, cleared: LADDER.length, attempts: 0, lastResult: 'win' }}
+        onPlay={() => {}}
+        onBack={() => {}}
+        onReset={() => {}}
+      />,
+    )
+    expect(html).toContain('ARGENTINA CAMPEÓN')
+    expect(html).toContain('VOLVER A JUGAR')
+  })
+
+  it('marca la final como etapa decisiva', () => {
+    const html = renderToString(
+      <LadderScreen
+        progress={{ stage: 4, cleared: 4, attempts: 0, lastResult: null }}
+        onPlay={() => {}}
+        onBack={() => {}}
+        onReset={() => {}}
+      />,
+    )
+    expect(html).toContain('BRASIL')
+    expect(html).toContain('JUGAR LA FINAL')
   })
 })

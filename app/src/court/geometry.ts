@@ -35,6 +35,10 @@ export const cell = (
   col: CourtCol,
 ): CourtCell => ({ side, row, col })
 
+/** Espeja una columna al otro lado de la red (4 columnas). */
+export const mirrorCol = (col: CourtCol): CourtCol =>
+  (3 - col) as CourtCol
+
 export const cellOrigin = (target: CourtCell): Vec => ({
   x: COURT.left + target.col * COURT.cellW,
   y:

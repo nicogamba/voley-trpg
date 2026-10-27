@@ -1,91 +1,15 @@
-import type {
-  BeatSpec,
-  CourtCell,
-  CourtPlayer,
-  CourtTeam,
-} from './types'
+import type { BeatSpec, CourtCell, CourtPlayer, CourtTeam } from './types'
 import { cell } from './geometry'
+import { TEAMS, buildRoster } from './teams'
 
 export const DEMO_TEAMS: Record<'home' | 'away', CourtTeam> = {
-  home: {
-    id: 'arg',
-    name: 'ARGENTINA',
-    short: 'ARG',
-    flag: ['#74c0e8', '#ffffff', '#74c0e8'],
-  },
-  away: {
-    id: 'bra',
-    name: 'BRASIL',
-    short: 'BRA',
-    flag: ['#1f9d55', '#ffd166', '#1f9d55'],
-  },
+  home: TEAMS.arg,
+  away: TEAMS.bra,
 }
 
 export const DEMO_PLAYERS: CourtPlayer[] = [
-  {
-    id: 'home-setter',
-    side: 'home',
-    classId: 'setter',
-    name: 'PEREYRA',
-    stats: { tecnica: 5, potencia: 2, velocidad: 3, lectura: 4 },
-    cell: cell('home', 0, 1),
-  },
-  {
-    id: 'home-middle',
-    side: 'home',
-    classId: 'middle',
-    name: 'QUINTANA',
-    stats: { tecnica: 2, potencia: 4, velocidad: 3, lectura: 5 },
-    cell: cell('home', 0, 0),
-  },
-  {
-    id: 'home-opposite',
-    side: 'home',
-    classId: 'opposite',
-    name: 'MOLINA',
-    stats: { tecnica: 2, potencia: 5, velocidad: 4, lectura: 3 },
-    cell: cell('home', 2, 3),
-  },
-  {
-    id: 'home-libero',
-    side: 'home',
-    classId: 'libero',
-    name: 'SOSA',
-    stats: { tecnica: 5, potencia: 1, velocidad: 5, lectura: 5 },
-    cell: cell('home', 2, 1),
-  },
-  {
-    id: 'away-setter',
-    side: 'away',
-    classId: 'setter',
-    name: 'RIBEIRO',
-    stats: { tecnica: 5, potencia: 2, velocidad: 3, lectura: 4 },
-    cell: cell('away', 0, 2),
-  },
-  {
-    id: 'away-middle',
-    side: 'away',
-    classId: 'middle',
-    name: 'COSTA',
-    stats: { tecnica: 2, potencia: 4, velocidad: 3, lectura: 5 },
-    cell: cell('away', 0, 3),
-  },
-  {
-    id: 'away-opposite',
-    side: 'away',
-    classId: 'opposite',
-    name: 'ALVES',
-    stats: { tecnica: 2, potencia: 5, velocidad: 4, lectura: 3 },
-    cell: cell('away', 2, 0),
-  },
-  {
-    id: 'away-libero',
-    side: 'away',
-    classId: 'libero',
-    name: 'SOUZA',
-    stats: { tecnica: 5, potencia: 1, velocidad: 5, lectura: 5 },
-    cell: cell('away', 2, 2),
-  },
+  ...buildRoster('arg', 'home'),
+  ...buildRoster('bra', 'away'),
 ]
 
 export const INITIAL_BALL: CourtCell = cell('home', 2, 3)

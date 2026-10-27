@@ -8,6 +8,7 @@ import {
   MATCH_RALLY_CAP,
   MATCH_TARGET,
   SERVE_REACH,
+  AI_STANDARD,
   attackOptions,
   cloneState,
   designatedServer,
@@ -22,6 +23,7 @@ import {
   resolveDuel,
   setQuality,
   type AttackPlan,
+  type AiTuning,
   type MatchEvent,
   type MatchState,
 } from './match'
@@ -47,6 +49,7 @@ export type CreateMatchOptions = {
   playerSide?: Side
   server?: Side
   targetScore?: number
+  ai?: AiTuning
 }
 
 export const createMatch = (options: CreateMatchOptions): MatchState => {
@@ -74,6 +77,7 @@ export const createMatch = (options: CreateMatchOptions): MatchState => {
     hiddenAttack: null,
     winner: null,
     targetScore: options.targetScore ?? MATCH_TARGET,
+    ai: options.ai ?? AI_STANDARD,
     rallyNumber: 1,
     rallyAttacks: 0,
     attackHistory: [],
@@ -146,11 +150,12 @@ const startPossession = (
   passQuality: Quality,
   ap: number,
 ): void => {
+  const tuning = side === state.playerSide ? 0 : state.ai.apBonus
   state.possession = side
   state.ball = { ...ballCell }
   state.passQuality = passQuality
   state.setQuality = 0
-  state.ap = Math.min(MATCH_AP_MAX, ap)
+  state.ap = Math.max(0, Math.min(MATCH_AP_MAX, ap + tuning))
   state.attackerId = null
   state.hiddenAttack = null
   state.hiddenScheme = null
