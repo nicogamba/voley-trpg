@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { ATTACK_AP_COST, ATTACK_LABEL } from '../engine'
+import type { AttackKind, DefenseScheme } from '../engine'
 import CourtCanvas from './CourtCanvas'
-import { DEMO_PLAYERS, DEMO_RALLY, DEMO_TEAMS } from './demo'
+import { DEMO_PLAYERS, DEMO_TEAMS } from './demo'
 import {
   COURT,
   cellDistance,
@@ -8,6 +10,23 @@ import {
   cellOrigin,
   sameCell,
 } from './geometry'
+import {
+  attackOptions,
+  type MatchEvent,
+  type MatchState,
+} from './match'
+import {
+  aiServe,
+  attack,
+  createMatch,
+  defend,
+  legalServeTargets,
+  nextDecision,
+  serve,
+  type EngineResult,
+} from './matchEngine'
+import { matchBeats } from './matchBeats'
+import { mulberry32, type Rng } from './matchAi'
 import type {
   BeatSpec,
   CourtCell,
@@ -20,13 +39,28 @@ type Props = {
   onBack: () => void
 }
 
-type Phase = 'setup' | 'moving' | 'rally' | 'ended'
+type UiPhase =
+  | 'setup'
+  | 'moving'
+  | 'serve'
+  | 'attack'
+  | 'defend'
+  | 'wait'
+  | 'anim'
+  | 'ended'
 
 type Move = {
   playerId: string
   name: string
   from: CourtCell
   to: CourtCell
+}
+
+type Animation = {
+  pre: MatchState
+  post: MatchState
+  events: MatchEvent[]
+  beats: BeatSpec[]
 }
 
 const SERVER_ID = 'home-opposite'
@@ -74,13 +108,7 @@ const Flag = ({ team }: { team: CourtTeam }) => (
   </span>
 )
 
-const TeamBlock = ({
-  team,
-  side,
-}: {
-  team: CourtTeam
-  side: Side
-}) => (
+const TeamBlock = ({ team, side }: { team: CourtTeam; side: Side }) => (
   <div className={`court-team court-team-${side}`}>
     <Flag team={team} />
     <div className="court-team-text">
@@ -90,8 +118,8 @@ const TeamBlock = ({
   </div>
 )
 
-const cellPosition = (cell: CourtCell) => {
-  const origin = cellOrigin(cell)
+const cellPosition = (target: CourtCell) => {
+  const origin = cellOrigin(target)
   return {
     left: `${(origin.x / COURT.width) * 100}%`,
     top: `${(origin.y / COURT.height) * 100}%`,
@@ -100,22 +128,46 @@ const cellPosition = (cell: CourtCell) => {
   }
 }
 
+const serveCaption = (state: MatchState): string =>
+  `SAQUE · ${DEMO_TEAMS[state.server].short} · ELEGÍ LA CELDA`
+
+const defenseCaption = (): string => 'DEFENSA · ELEGÍ EL ESQUEMA'
+
+const endedCaption = (state: MatchState): string =>
+  state.winner
+    ? `¡${DEMO_TEAMS[state.winner].name} GANA EL SET · ${state.score.home}-${state.score.away}!`
+    : 'FIN DEL SET'
+
 export const CourtScreen = ({ onBack }: Props) => {
   const [roster, setRoster] = useState<CourtPlayer[]>(cloneRoster)
-  const [phase, setPhase] = useState<Phase>('rally')
+  const [match, setMatch] = useState<MatchState>(() =>
+    createMatch({
+      roster: cloneRoster(),
+      playerSide: 'home',
+      server: 'home',
+    }),
+  )
+  const [ui, setUi] = useState<UiPhase>('setup')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [move, setMove] = useState<Move | null>(null)
-  const [runId, setRunId] = useState(0)
   const [setupSeq, setSetupSeq] = useState(0)
-  const [caption, setCaption] = useState('SAQUE · MOLINA')
-  const [score, setScore] = useState<Record<Side, number>>({
+  const [runId, setRunId] = useState(0)
+  const [caption, setCaption] = useState(SETUP_HINT)
+  const [shownScore, setShownScore] = useState<Record<Side, number>>({
     home: 0,
     away: 0,
   })
+  const [animation, setAnimation] = useState<Animation | null>(null)
+  const [attackKind, setAttackKind] = useState<AttackKind | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const rngRef = useRef<Rng>(mulberry32(0x20261027))
 
-  const server = roster.find((player) => player.id === SERVER_ID) ?? roster[0]
   const selected =
     roster.find((player) => player.id === selectedId) ?? null
+
+  const setupServer =
+    roster.find((player) => player.id === SERVER_ID) ?? roster[0]
+  const setupBall = setupServer.cell
 
   /** Durante un movimiento, el jugador arranca en la celda vieja. */
   const displayPlayers = useMemo(() => {
@@ -132,36 +184,99 @@ export const CourtScreen = ({ onBack }: Props) => {
     [move],
   )
 
-  const startRally = () => {
+  const options = useMemo(
+    () => (ui === 'attack' ? attackOptions(match) : []),
+    [match, ui],
+  )
+
+  const selectedOption =
+    options.find((option) => option.kind === attackKind) ?? null
+
+  const attackHint =
+    selectedOption && attackKind
+      ? `ATAQUE · ${ATTACK_LABEL[attackKind]} · ${
+          selectedOption.attacker.name
+        } · ELEGÍ LA CELDA`
+      : 'ATAQUE · ELEGÍ EL GOLPE'
+
+  const beginMatch = (formation: CourtPlayer[]) => {
+    const fresh = createMatch({
+      roster: formation,
+      playerSide: 'home',
+      server: 'home',
+    })
+    setRoster(formation)
+    setMatch(fresh)
+    setShownScore(fresh.score)
+    setAnimation(null)
     setSelectedId(null)
     setMove(null)
-    setPhase('rally')
-    setScore({ home: 0, away: 0 })
-    setCaption('SAQUE · MOLINA')
+    setAttackKind(null)
+    setCaption(SETUP_HINT)
+    setNotice(null)
+    setSetupSeq((value) => value + 1)
     setRunId((value) => value + 1)
-    setSetupSeq((value) => value + 1)
+    setUi(nextDecision(fresh) === 'serve' ? 'serve' : 'wait')
   }
 
-  const openSetup = () => {
+  const applyPost = (next: MatchState) => {
+    setMatch(next)
+    setShownScore(next.score)
+    setAnimation(null)
+    setAttackKind(null)
     setSelectedId(null)
     setMove(null)
-    setPhase('setup')
-    setScore({ home: 0, away: 0 })
-    setSetupSeq((value) => value + 1)
+    const decision = nextDecision(next)
+    setUi(decision === 'end' ? 'ended' : decision)
+    setRunId((value) => value + 1)
   }
 
-  const resetPositions = () => {
-    setRoster(cloneRoster())
+  const play = (result: EngineResult) => {
+    const beats = matchBeats(match, result.events, result.state)
+    if (beats.length === 0) {
+      applyPost(result.state)
+      return
+    }
+    setAnimation({
+      pre: match,
+      post: result.state,
+      events: result.events,
+      beats,
+    })
+    setUi('anim')
+    setAttackKind(null)
     setSelectedId(null)
     setMove(null)
-    setScore({ home: 0, away: 0 })
-    setSetupSeq((value) => value + 1)
+    setCaption(beats[0]?.caption ?? '')
+    setRunId((value) => value + 1)
   }
 
-  const selectCell = (cell: CourtCell) => {
-    if (phase !== 'setup') return
+  const run = (action: () => EngineResult) => {
+    setNotice(null)
+    try {
+      play(action())
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'JUGADA INVÁLIDA'
+      setNotice(message)
+      setCaption(message)
+    }
+  }
 
-    const occupant = roster.find((player) => sameCell(player.cell, cell))
+  const finishAnimation = () => {
+    if (!animation) return
+    applyPost(animation.post)
+  }
+
+  const handlePoint = () => {
+    const point = animation?.events.find((event) => event.type === 'POINT')
+    if (point?.type === 'POINT') setShownScore(point.score)
+  }
+
+  const selectCell = (target: CourtCell) => {
+    if (ui !== 'setup') return
+
+    const occupant = roster.find((player) => sameCell(player.cell, target))
     if (occupant) {
       setSelectedId((current) =>
         current === occupant.id ? null : occupant.id,
@@ -170,7 +285,7 @@ export const CourtScreen = ({ onBack }: Props) => {
     }
 
     if (!selected) return
-    if (cellDistance(selected.cell, cell) !== 1) {
+    if (cellDistance(selected.cell, target) !== 1) {
       setSelectedId(null)
       return
     }
@@ -179,11 +294,11 @@ export const CourtScreen = ({ onBack }: Props) => {
       playerId: selected.id,
       name: selected.name,
       from: selected.cell,
-      to: cell,
+      to: target,
     })
     setSelectedId(null)
     setSetupSeq((value) => value + 1)
-    setPhase('moving')
+    setUi('moving')
   }
 
   const finishMove = () => {
@@ -196,27 +311,321 @@ export const CourtScreen = ({ onBack }: Props) => {
       ),
     )
     setMove(null)
-    setPhase('setup')
+    setUi('setup')
     setSetupSeq((value) => value + 1)
   }
 
-  const captionText =
-    phase === 'setup'
-      ? selected
-        ? `${selected.name} · ELEGÍ UNA CELDA`
-        : SETUP_HINT
-      : phase === 'moving' && move
-        ? `MUEVE · ${move.name}`
-        : phase === 'ended'
-          ? 'FIN DEL RALLY · REPETÍ U ORDENÁ'
-          : caption
+  const resetPositions = () => {
+    setRoster(cloneRoster())
+    setSelectedId(null)
+    setMove(null)
+    setSetupSeq((value) => value + 1)
+  }
+
+  const commitServe = (target: CourtCell) => {
+    if (ui !== 'serve') return
+    run(() => serve(match, target, rngRef.current))
+  }
+
+  const commitAttack = (target: CourtCell) => {
+    if (ui !== 'attack' || !attackKind) return
+    run(() => attack(match, attackKind, target, rngRef.current))
+  }
+
+  const commitDefense = (scheme: DefenseScheme) => {
+    if (ui !== 'defend') return
+    run(() => defend(match, scheme, rngRef.current))
+  }
+
+  const continueAiServe = () => {
+    if (ui !== 'wait') return
+    run(() => aiServe(match, rngRef.current))
+  }
+
+  const captionText = (() => {
+    if (notice) return notice
+    if (ui === 'setup') {
+      return selected ? `${selected.name} · ELEGÍ UNA CELDA` : SETUP_HINT
+    }
+    if (ui === 'moving' && move) return `MUEVE · ${move.name}`
+    if (ui === 'serve') return serveCaption(match)
+    if (ui === 'attack') return attackHint
+    if (ui === 'defend') return defenseCaption()
+    if (ui === 'wait') return 'SAQUE RIVAL · CONTINUAR'
+    if (ui === 'ended') return endedCaption(match)
+    return caption
+  })()
 
   const canvasKey =
-    phase === 'setup'
-      ? `setup-${setupSeq}`
-      : phase === 'moving'
-        ? `move-${setupSeq}`
-        : `rally-${runId}`
+    ui === 'anim'
+      ? `anim-${runId}`
+      : ui === 'setup'
+        ? `setup-${setupSeq}`
+        : ui === 'moving'
+          ? `move-${setupSeq}`
+          : `still-${runId}-${ui}`
+
+  const canvasPlayers = animation
+    ? animation.pre.players
+    : ui === 'moving'
+      ? displayPlayers
+      : ui === 'setup'
+        ? roster
+        : match.players
+
+  const canvasScript = animation
+    ? animation.beats
+    : ui === 'moving'
+      ? moveScript
+      : EMPTY_SCRIPT
+
+  const canvasBall = animation
+    ? animation.pre.ball
+    : ui === 'setup' || ui === 'moving'
+      ? setupBall
+      : match.ball
+
+  const renderSetupOverlay = () => (
+    <div
+      className="court-hit-layer"
+      role="group"
+      aria-label="Ordená tus jugadores"
+    >
+      {HOME_CELLS.map((target) => {
+        const occupant = roster.find((player) =>
+          sameCell(player.cell, target),
+        )
+        const isSelected = occupant?.id === selectedId
+        const isDest =
+          Boolean(selected) &&
+          !occupant &&
+          cellDistance(selected!.cell, target) === 1
+
+        return (
+          <button
+            key={`${target.row}-${target.col}`}
+            type="button"
+            style={cellPosition(target)}
+            className={[
+              'court-hit',
+              occupant ? 'court-hit-player' : '',
+              isSelected ? 'court-hit-selected' : '',
+              isDest ? 'court-hit-dest' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            aria-label={
+              occupant
+                ? `${occupant.name}, ${
+                    isSelected ? 'seleccionado' : 'elegir para mover'
+                  }`
+                : `Celda ${target.row + 1}-${target.col + 1}`
+            }
+            aria-pressed={isSelected}
+            onClick={() => selectCell(target)}
+          />
+        )
+      })}
+    </div>
+  )
+
+  const renderServeOverlay = () => (
+    <div
+      className="court-hit-layer"
+      role="group"
+      aria-label="Elegí la celda del saque"
+    >
+      {legalServeTargets(match).map((target) => (
+        <button
+          key={`${target.row}-${target.col}`}
+          type="button"
+          style={cellPosition(target)}
+          className="court-hit court-hit-valid court-hit-serve"
+          aria-label={`Sacar a fila ${target.row + 1}, columna ${
+            target.col + 1
+          }`}
+          onClick={() => commitServe(target)}
+        />
+      ))}
+    </div>
+  )
+
+  const renderAttackOverlay = () => {
+    if (!selectedOption) return null
+    return (
+      <div
+        className="court-hit-layer"
+        role="group"
+        aria-label="Elegí la celda del ataque"
+      >
+        {cellsOfSide('away').map((target) => {
+          const valid = selectedOption.targets.some((option) =>
+            sameCell(option, target),
+          )
+          return (
+            <button
+              key={`${target.row}-${target.col}`}
+              type="button"
+              style={cellPosition(target)}
+              className={[
+                'court-hit',
+                valid ? 'court-hit-valid court-hit-attack' : 'court-hit-off',
+              ].join(' ')}
+              aria-label={`Atacar a fila ${target.row + 1}, columna ${
+                target.col + 1
+              }`}
+              disabled={!valid}
+              onClick={() => commitAttack(target)}
+            />
+          )
+        })}
+      </div>
+    )
+  }
+
+  const renderOverlay = () => {
+    if (ui === 'setup') return renderSetupOverlay()
+    if (ui === 'serve') return renderServeOverlay()
+    if (ui === 'attack') return renderAttackOverlay()
+    return null
+  }
+
+  const renderPanel = () => {
+    if (ui === 'setup') {
+      return (
+        <div className="court-panel">
+          <button
+            type="button"
+            onClick={() => beginMatch(roster)}
+            className="pixel-btn primary"
+          >
+            ▶ EMPEZAR PARTIDO
+          </button>
+          <div className="court-panel-stack">
+            <button
+              type="button"
+              onClick={resetPositions}
+              className="pixel-btn secondary"
+            >
+              REINICIAR
+            </button>
+            <button
+              type="button"
+              onClick={onBack}
+              className="pixel-btn ghost"
+            >
+              VOLVER
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    if (ui === 'serve') {
+      return (
+        <div className="court-panel court-panel-single">
+          <div className="court-hint">
+            TOCÁ UNA CELDA DEL RIVAL PARA SACAR
+          </div>
+        </div>
+      )
+    }
+
+    if (ui === 'attack') {
+      return (
+        <div className="court-actions" role="group" aria-label="Elegí el ataque">
+          {options.map((option) => (
+            <button
+              key={option.kind}
+              type="button"
+              className={[
+                'court-action',
+                option.kind === attackKind ? 'is-selected' : '',
+                option.affordable ? '' : 'is-locked',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              aria-pressed={option.kind === attackKind}
+              disabled={!option.affordable}
+              onClick={() => {
+                setNotice(null)
+                setAttackKind((current) =>
+                  current === option.kind ? null : option.kind,
+                )
+              }}
+            >
+              <span>{ATTACK_LABEL[option.kind]}</span>
+              <b>{ATTACK_AP_COST[option.kind]}</b>
+            </button>
+          ))}
+        </div>
+      )
+    }
+
+    if (ui === 'defend') {
+      return (
+        <div className="court-schemes" role="group" aria-label="Elegí la defensa">
+          {(
+            [
+              ['wall', 'MURO', 'Cierra la red'],
+              ['spread', 'ABIERTO', 'Cubre el ancho'],
+              ['deep', 'PROFUNDO', 'Espera atrás'],
+              ['libero', 'LÍBERO', 'Lee las manos'],
+            ] as const
+          ).map(([scheme, label, hint]) => (
+            <button
+              key={scheme}
+              type="button"
+              className="court-scheme"
+              onClick={() => commitDefense(scheme)}
+            >
+              <strong>{label}</strong>
+              <span>{hint}</span>
+            </button>
+          ))}
+        </div>
+      )
+    }
+
+    if (ui === 'wait') {
+      return (
+        <div className="court-panel court-panel-single">
+          <button
+            type="button"
+            onClick={continueAiServe}
+            className="pixel-btn primary"
+          >
+            CONTINUAR · SAQUE RIVAL
+          </button>
+        </div>
+      )
+    }
+
+    if (ui === 'ended') {
+      return (
+        <div className="court-panel">
+          <button
+            type="button"
+            onClick={() => beginMatch(roster)}
+            className="pixel-btn primary"
+          >
+            ↻ REVANCHA
+          </button>
+          <button type="button" onClick={onBack} className="pixel-btn ghost">
+            VOLVER
+          </button>
+        </div>
+      )
+    }
+
+    return (
+      <div className="court-panel court-panel-single">
+        <div className="court-hint">EN JUEGO…</div>
+      </div>
+    )
+  }
+
+  const showExit = ui !== 'setup' && ui !== 'ended'
 
   return (
     <div className="court-shell scanlines">
@@ -225,11 +634,23 @@ export const CourtScreen = ({ onBack }: Props) => {
 
         <div className="court-score">
           <div className="court-score-line">
-            <span className="court-score-num">{score.home}</span>
+            <span className="court-score-num">{shownScore.home}</span>
             <span className="court-score-sep">×</span>
-            <span className="court-score-num">{score.away}</span>
+            <span className="court-score-num">{shownScore.away}</span>
           </div>
-          <p className="court-score-label">RALLY DEMO · V2</p>
+          <p className="court-score-label">SET A 7 · V2</p>
+          <div
+            className={`court-energy${
+              match.possession !== match.playerSide ? ' is-rival' : ''
+            }`}
+            aria-label={`Energía ${
+              match.possession === match.playerSide ? 'tuya' : 'rival'
+            } ${match.ap} de 3`}
+          >
+            {[0, 1, 2].map((pip) => (
+              <i key={pip} className={pip < match.ap ? 'is-on' : ''} />
+            ))}
+          </div>
         </div>
 
         <TeamBlock team={DEMO_TEAMS.away} side="away" />
@@ -240,120 +661,46 @@ export const CourtScreen = ({ onBack }: Props) => {
           <div className="court-frame">
             <CourtCanvas
               key={canvasKey}
-              players={phase === 'moving' ? displayPlayers : roster}
-              script={
-                phase === 'setup'
-                  ? EMPTY_SCRIPT
-                  : phase === 'moving'
-                    ? moveScript
-                    : DEMO_RALLY
-              }
-              initialBall={server.cell}
+              players={canvasPlayers}
+              script={canvasScript}
+              initialBall={canvasBall}
               onCaption={setCaption}
-              onPoint={(side) =>
-                setScore((current) => ({
-                  ...current,
-                  [side]: current[side] + 1,
-                }))
-              }
+              onPoint={animation ? handlePoint : undefined}
               onEnd={
-                phase === 'moving'
-                  ? finishMove
-                  : phase === 'rally'
-                    ? () => setPhase('ended')
+                animation
+                  ? finishAnimation
+                  : ui === 'moving'
+                    ? finishMove
                     : undefined
               }
             />
 
-            {phase === 'setup' && (
-              <div
-                className="court-hit-layer"
-                role="group"
-                aria-label="Ordená tus jugadores"
-              >
-                {HOME_CELLS.map((cell) => {
-                  const occupant = roster.find((player) =>
-                    sameCell(player.cell, cell),
-                  )
-                  const isSelected = occupant?.id === selectedId
-                  const isDest =
-                    Boolean(selected) &&
-                    !occupant &&
-                    cellDistance(selected!.cell, cell) === 1
-
-                  return (
-                    <button
-                      key={`${cell.row}-${cell.col}`}
-                      type="button"
-                      style={cellPosition(cell)}
-                      className={[
-                        'court-hit',
-                        occupant ? 'court-hit-player' : '',
-                        isSelected ? 'court-hit-selected' : '',
-                        isDest ? 'court-hit-dest' : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                      aria-label={
-                        occupant
-                          ? `${occupant.name}, ${
-                              isSelected
-                                ? 'seleccionado'
-                                : 'elegir para mover'
-                            }`
-                          : `Celda ${cell.row + 1}-${cell.col + 1}`
-                      }
-                      aria-pressed={isSelected}
-                      onClick={() => selectCell(cell)}
-                    />
-                  )
-                })}
-              </div>
-            )}
+            {renderOverlay()}
           </div>
 
           <div className="court-caption-bar">
             <p
-              className={`court-caption${phase === 'ended' ? ' is-ended' : ''}`}
+              className={`court-caption${
+                ui === 'ended' ? ' is-ended' : ''
+              }`}
               aria-live="polite"
             >
               {captionText}
             </p>
-            {(phase === 'rally' || phase === 'ended') && (
+            {showExit && (
               <button
                 type="button"
                 className="court-chip"
-                onClick={openSetup}
+                onClick={onBack}
               >
-                ORDENAR
-              </button>
-            )}
-            {phase === 'setup' && (
-              <button
-                type="button"
-                className="court-chip"
-                onClick={resetPositions}
-              >
-                REINICIAR
+                SALIR
               </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="court-panel">
-        <button
-          type="button"
-          onClick={startRally}
-          disabled={phase === 'moving'}
-          className="pixel-btn primary"
-        >
-          {phase === 'setup' ? '▶ JUGAR RALLY' : '↻ REPETIR RALLY'}
-        </button>
-        <button type="button" onClick={onBack} className="pixel-btn ghost">
-          VOLVER
-        </button>
-      </div>
+      {renderPanel()}
     </div>
   )
 }
