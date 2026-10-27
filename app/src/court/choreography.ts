@@ -4,6 +4,7 @@ import type {
   BeatSpec,
   CourtCell,
   CourtPlayer,
+  CutInSpec,
   Pose,
   Side,
   Vec,
@@ -34,8 +35,10 @@ export type TimelineBeat = {
   end: number
   kind: BeatKind
   caption: string
+  actorId?: string
   point?: Side
   fx?: BeatSpec['fx']
+  cutin?: CutInSpec
 }
 
 export type Timeline = {
@@ -186,8 +189,10 @@ export const buildTimeline = (
       end,
       kind: beat.kind,
       caption: beat.caption,
+      actorId: beat.actorId,
       point: beat.point,
       fx: beat.fx,
+      cutin: beat.cutin,
     })
     cursor = end
   }

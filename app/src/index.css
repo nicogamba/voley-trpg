@@ -1489,6 +1489,15 @@ button:disabled {
 
 /* ---------- Cancha v2 (prototipo) ---------- */
 
+.court-arena {
+  width: 100%;
+  min-height: 100svh;
+}
+
+.court-side {
+  display: none;
+}
+
 .court-shell {
   width: 100%;
   max-width: 430px;
@@ -1743,6 +1752,218 @@ button:disabled {
   box-shadow: none;
 }
 
+.court-chip-icon {
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+/* Cut-in de duelo: aparece abajo, sobre la acción reframed por la cámara. */
+.court-cutin {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 108px;
+  margin: 0;
+  padding: 6px 8px 5px;
+  appearance: none;
+  border: 0;
+  border-top: 2px solid var(--gold);
+  background:
+    linear-gradient(180deg, rgba(5, 7, 13, 0.18), rgba(5, 7, 13, 0.94) 34%),
+    repeating-linear-gradient(
+      115deg,
+      rgba(91, 140, 255, 0.12) 0 2px,
+      transparent 2px 14px
+    ),
+    #0a1020;
+  color: var(--paper);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.55);
+  animation: court-cutin-show 1s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.court-cutin::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0 12px,
+    rgba(255, 209, 102, 0.07) 12px 14px
+  );
+  animation: court-cutin-speed 800ms linear infinite;
+  pointer-events: none;
+}
+
+.court-cutin > * {
+  position: relative;
+  z-index: 1;
+}
+
+.court-cutin-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 82px;
+  min-width: 0;
+}
+
+.court-cutin-side b {
+  max-width: 100%;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  color: var(--paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.court-cutin-role {
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #9fb0d5;
+}
+
+.court-cutin-core {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 58px;
+}
+
+.court-cutin-core strong {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--red);
+  text-shadow: 2px 2px 0 #000;
+}
+
+.court-cutin-move {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+}
+
+.court-cutin-hint {
+  font-size: 5px;
+  letter-spacing: 0.1em;
+  color: #7f8fb0;
+  white-space: nowrap;
+}
+
+.court-cutin.is-block {
+  border-top-color: var(--red);
+}
+
+.court-cutin.is-block .court-cutin-move {
+  color: #ff9aa8;
+}
+
+@keyframes court-cutin-show {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  10% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  86% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(16%);
+    opacity: 0;
+  }
+}
+
+@keyframes court-cutin-speed {
+  to {
+    background-position: 44px 0;
+  }
+}
+
+.court-stamp {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+  text-align: center;
+  animation: court-stamp 1s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.court-stamp strong {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  text-shadow:
+    3px 3px 0 #000,
+    -1px -1px 0 #000,
+    0 0 18px rgba(255, 209, 102, 0.45);
+  transform: rotate(-6deg);
+  white-space: nowrap;
+}
+
+.court-stamp span {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  color: var(--paper);
+  text-shadow: 2px 2px 0 #000;
+  transform: rotate(-6deg);
+}
+
+.court-stamp.is-away strong {
+  color: #ff9aa8;
+  text-shadow:
+    3px 3px 0 #000,
+    -1px -1px 0 #000,
+    0 0 18px rgba(255, 122, 138, 0.4);
+}
+
+@keyframes court-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-8deg);
+  }
+  14% {
+    opacity: 1;
+    transform: scale(1.1) rotate(-6deg);
+  }
+  26% {
+    transform: scale(1) rotate(-6deg);
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.06) rotate(-6deg);
+  }
+}
+
 .court-panel {
   display: grid;
   grid-template-columns: 1.5fr 1fr;
@@ -1987,9 +2208,183 @@ button:disabled {
   }
 }
 
+/* En desktop la cancha va al centro y el estadio ocupa los laterales. */
+@media (min-width: 900px) {
+  .court-arena {
+    display: grid;
+    grid-template-columns:
+      minmax(180px, 220px)
+      minmax(0, 460px)
+      minmax(180px, 220px);
+    gap: 16px;
+    align-items: start;
+    justify-content: center;
+    padding: 18px 20px;
+  }
+
+  .court-shell {
+    min-height: calc(100svh - 36px);
+    max-width: none;
+    margin: 0;
+  }
+
+  .court-center {
+    width: 100%;
+  }
+
+  .court-stage {
+    align-items: flex-start;
+  }
+
+  .court-cutin {
+    height: 120px;
+  }
+
+  .court-side {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: sticky;
+    top: 18px;
+    padding: 10px;
+    background:
+      linear-gradient(180deg, rgba(91, 140, 255, 0.08), transparent 30%),
+      #080d18;
+    border: 2px solid #2a3654;
+    box-shadow:
+      0 0 0 2px #000,
+      0 0 26px rgba(91, 140, 255, 0.12);
+  }
+
+  .court-side-kicker {
+    margin: 0;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    color: var(--gold);
+  }
+
+  .court-side-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .court-side-head h2 {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.1;
+    letter-spacing: 0.06em;
+    color: var(--paper);
+  }
+
+  .court-side-note {
+    margin: 0;
+    font-size: 7px;
+    letter-spacing: 0.12em;
+    color: #8fa4c8;
+  }
+
+  .court-roster {
+    list-style: none;
+    margin: 3px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .court-roster-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 0;
+    border-bottom: 1px dashed #1b2740;
+  }
+
+  .court-roster-row b {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .court-roster-role {
+    font-size: 6px;
+    font-weight: 700;
+    text-align: center;
+    padding: 1px 2px;
+    border: 1px solid #3a4a6e;
+    color: #9fb0d5;
+  }
+
+  .court-roster-role.is-setter {
+    color: #65d68a;
+    border-color: rgba(101, 214, 138, 0.4);
+  }
+
+  .court-roster-role.is-middle {
+    color: #ffd166;
+    border-color: rgba(255, 209, 102, 0.4);
+  }
+
+  .court-roster-role.is-opposite {
+    color: #ff8fa3;
+    border-color: rgba(255, 143, 163, 0.4);
+  }
+
+  .court-roster-role.is-libero {
+    color: #67d8ef;
+    border-color: rgba(103, 216, 239, 0.4);
+  }
+
+  .court-roster-stats {
+    display: flex;
+    gap: 2px;
+    font-size: 6px;
+    letter-spacing: 0.02em;
+    color: #6d7ea3;
+  }
+
+  .court-roster-stats i {
+    font-style: normal;
+  }
+
+  .court-commentary {
+    margin-top: 4px;
+    padding: 7px;
+    background: #0a1020;
+    border-left: 2px solid var(--gold);
+  }
+
+  .court-commentary span {
+    display: block;
+    font-size: 6px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--gold);
+  }
+
+  .court-commentary p {
+    margin: 3px 0 0;
+    font-size: 8px;
+    line-height: 1.5;
+    color: var(--paper);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .court-canvas {
     image-rendering: auto;
+  }
+
+  .court-cutin,
+  .court-stamp,
+  .court-cutin::before {
+    animation: none;
   }
 }
 

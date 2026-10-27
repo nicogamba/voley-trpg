@@ -6,12 +6,19 @@ import {
   sampleBall,
   samplePlayer,
 } from './choreography'
+import type {
+  BallSample,
+  PlayerSample,
+  TimelineBeat,
+} from './choreography'
 import { BALL_SHEET, loadImage, sheetFor } from './sprites'
+import { playCue } from './audio'
 import type {
   BeatSpec,
   CourtCell,
   CourtPlayer,
   CourtTeam,
+  CutInSpec,
   Pose,
   Side,
 } from './types'
@@ -116,99 +123,215 @@ type Props = {
   onCaption: (caption: string) => void
   onPoint?: (side: Side) => void
   onEnd?: () => void
+  onCutIn?: (cutin: CutInSpec, duration: number) => void
+  muted?: boolean
 }
 
-const drawCourt = (ctx: CanvasRenderingContext2D) => {
+const withAlpha = (hex: string, alpha: number): string => {
+  const value = hex.replace('#', '')
+  const r = Number.parseInt(value.slice(0, 2), 16)
+  const g = Number.parseInt(value.slice(2, 4), 16)
+  const b = Number.parseInt(value.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+const drawCourt = (
+  ctx: CanvasRenderingContext2D,
+  teams: Record<Side, CourtTeam>,
+) => {
+  const left = COURT.left
+  const top = COURT.top
+  const width = COURT.cellW * 4
+  const height = COURT.cellH * 6
+  const right = left + width
+  const bottom = top + height
+
   ctx.fillStyle = '#05070d'
+  ctx.fillRect(0, 0, COURT.width, COURT.height)
+
+  // Luz de estadio y marco de la cancha.
+  const glow = ctx.createRadialGradient(
+    COURT.width / 2,
+    COURT.netY,
+    30,
+    COURT.width / 2,
+    COURT.netY,
+    280,
+  )
+  glow.addColorStop(0, 'rgba(91, 140, 255, 0.12)')
+  glow.addColorStop(1, 'rgba(5, 7, 13, 0)')
+  ctx.fillStyle = glow
   ctx.fillRect(0, 0, COURT.width, COURT.height)
 
   // Mitad rival y mitad propia.
   ctx.fillStyle = '#170d18'
-  ctx.fillRect(COURT.left, COURT.top, COURT.cellW * 4, COURT.cellH * 3)
+  ctx.fillRect(left, top, width, COURT.cellH * 3)
   ctx.fillStyle = '#0b1830'
-  ctx.fillRect(
-    COURT.left,
-    COURT.netY,
-    COURT.cellW * 4,
-    COURT.cellH * 3,
+  ctx.fillRect(left, COURT.netY, width, COURT.cellH * 3)
+
+  // Zonas de equipo.
+  const awayZone = ctx.createLinearGradient(0, top, 0, top + COURT.cellH * 2)
+  awayZone.addColorStop(0, withAlpha(teams.away.kit.shirt, 0.18))
+  awayZone.addColorStop(1, withAlpha(teams.away.kit.shirt, 0))
+  ctx.fillStyle = awayZone
+  ctx.fillRect(left, top, width, COURT.cellH * 2)
+  const homeZone = ctx.createLinearGradient(
+    0,
+    bottom - COURT.cellH * 2,
+    0,
+    bottom,
   )
+  homeZone.addColorStop(0, withAlpha(teams.home.kit.shirt, 0))
+  homeZone.addColorStop(1, withAlpha(teams.home.kit.shirt, 0.18))
+  ctx.fillStyle = homeZone
+  ctx.fillRect(left, bottom - COURT.cellH * 2, width, COURT.cellH * 2)
+
+  // Reflejos diagonales del piso.
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(left, top, width, height)
+  ctx.clip()
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.022)'
+  for (let x = -height; x < width; x += 56) {
+    ctx.beginPath()
+    ctx.moveTo(left + x, top)
+    ctx.lineTo(left + x + 16, top)
+    ctx.lineTo(left + x + 16 + height, bottom)
+    ctx.lineTo(left + x + height, bottom)
+    ctx.closePath()
+    ctx.fill()
+  }
+  ctx.restore()
+
+  // Haces de luz.
+  const beam = ctx.createLinearGradient(0, 0, 0, 330)
+  beam.addColorStop(0, 'rgba(103, 216, 239, 0.06)')
+  beam.addColorStop(1, 'rgba(103, 216, 239, 0)')
+  ctx.fillStyle = beam
+  ctx.beginPath()
+  ctx.moveTo(26, 10)
+  ctx.lineTo(112, 330)
+  ctx.lineTo(248, 330)
+  ctx.lineTo(334, 10)
+  ctx.closePath()
+  ctx.fill()
+
+  // Carteles LED del perímetro.
+  ctx.fillStyle = '#070b14'
+  ctx.fillRect(0, 0, COURT.width, 10)
+  ctx.fillRect(0, COURT.height - 10, COURT.width, 10)
+  ctx.fillRect(0, top, 8, height)
+  ctx.fillRect(right, top, 8, height)
+  ctx.fillStyle = 'rgba(103, 216, 239, 0.22)'
+  ctx.fillRect(0, 9, COURT.width, 1)
+  ctx.fillRect(0, COURT.height - 10, COURT.width, 1)
+  ctx.font = '700 6px "Courier New", monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = withAlpha(teams.away.kit.trim, 0.9)
+  ctx.fillText(teams.away.short, 24, 5)
+  ctx.fillStyle = '#67d8ef'
+  ctx.fillText('ZONA 3 · CANCHA CENTRAL', COURT.width / 2, 5)
+  ctx.fillStyle = withAlpha(teams.home.kit.trim, 0.9)
+  ctx.fillText(teams.home.short, COURT.width - 24, 5)
+  ctx.fillStyle = 'rgba(255, 209, 102, 0.8)'
+  ctx.fillText('VÓLEY 4V4 · COPA ZONA 3', COURT.width / 2, 479)
+
+  for (let y = top + 6; y < bottom; y += 18) {
+    ctx.fillStyle = withAlpha(teams.away.kit.shirt, 0.3)
+    ctx.fillRect(2, y, 4, 9)
+    ctx.fillStyle = withAlpha(teams.home.kit.shirt, 0.3)
+    ctx.fillRect(right + 2, y, 4, 9)
+  }
 
   // Grilla tenue para leer el movimiento.
   ctx.strokeStyle = 'rgba(120, 150, 210, 0.08)'
   ctx.lineWidth = 1
   for (let col = 0; col <= 4; col += 1) {
-    const x = COURT.left + col * COURT.cellW + 0.5
+    const x = left + col * COURT.cellW + 0.5
     ctx.beginPath()
-    ctx.moveTo(x, COURT.top)
-    ctx.lineTo(x, COURT.top + COURT.cellH * 6)
+    ctx.moveTo(x, top)
+    ctx.lineTo(x, bottom)
     ctx.stroke()
   }
   for (let row = 0; row <= 6; row += 1) {
-    const y = COURT.top + row * COURT.cellH + 0.5
+    const y = top + row * COURT.cellH + 0.5
     ctx.beginPath()
-    ctx.moveTo(COURT.left, y)
-    ctx.lineTo(COURT.left + COURT.cellW * 4, y)
+    ctx.moveTo(left, y)
+    ctx.lineTo(right, y)
     ctx.stroke()
   }
 
   // Líneas de cancha.
   ctx.strokeStyle = '#3a4a70'
-  ctx.strokeRect(
-    COURT.left + 0.5,
-    COURT.top + 0.5,
-    COURT.cellW * 4 - 1,
-    COURT.cellH * 6 - 1,
-  )
+  ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1)
 
   // Línea de ataque (3 metros) de cada lado.
   ctx.setLineDash([6, 5])
   ctx.strokeStyle = 'rgba(180, 200, 240, 0.34)'
-  for (const y of [
-    COURT.top + COURT.cellH * 2,
-    COURT.netY + COURT.cellH,
-  ]) {
+  for (const y of [top + COURT.cellH * 2, COURT.netY + COURT.cellH]) {
     ctx.beginPath()
-    ctx.moveTo(COURT.left, y + 0.5)
-    ctx.lineTo(COURT.left + COURT.cellW * 4, y + 0.5)
+    ctx.moveTo(left, y + 0.5)
+    ctx.lineTo(right, y + 0.5)
     ctx.stroke()
   }
   ctx.setLineDash([])
 
-  drawNet(ctx)
+  drawNet(ctx, teams)
 }
 
-const drawNet = (ctx: CanvasRenderingContext2D) => {
+const drawNet = (
+  ctx: CanvasRenderingContext2D,
+  teams: Record<Side, CourtTeam>,
+) => {
   const left = COURT.left
   const right = COURT.left + COURT.cellW * 4
 
-  ctx.fillStyle = 'rgba(5, 7, 13, 0.55)'
-  ctx.fillRect(left, COURT.netY - 4, right - left, 8)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)'
+  ctx.fillRect(left, COURT.netY + 5, right - left, 4)
 
-  ctx.strokeStyle = 'rgba(207, 216, 238, 0.28)'
+  ctx.fillStyle = 'rgba(5, 7, 13, 0.62)'
+  ctx.fillRect(left, COURT.netY - 6, right - left, 12)
+
+  // Malla.
+  ctx.strokeStyle = 'rgba(207, 216, 238, 0.22)'
   ctx.lineWidth = 1
-  for (let x = left + 4; x < right; x += 12) {
+  for (let x = left + 4; x < right; x += 8) {
     ctx.beginPath()
-    ctx.moveTo(x + 0.5, COURT.netY - 4)
-    ctx.lineTo(x + 0.5, COURT.netY + 4)
+    ctx.moveTo(x + 0.5, COURT.netY - 5)
+    ctx.lineTo(x + 0.5, COURT.netY + 5)
+    ctx.stroke()
+  }
+  for (const y of [COURT.netY - 3, COURT.netY, COURT.netY + 3]) {
+    ctx.beginPath()
+    ctx.moveTo(left, y + 0.5)
+    ctx.lineTo(right, y + 0.5)
     ctx.stroke()
   }
 
+  // Cinta superior e inferior.
   ctx.fillStyle = '#e8eefc'
-  ctx.fillRect(left, COURT.netY - 1, right - left, 2)
+  ctx.fillRect(left, COURT.netY - 2, right - left, 2)
+  ctx.fillStyle = 'rgba(232, 238, 252, 0.55)'
+  ctx.fillRect(left, COURT.netY + 4, right - left, 1)
 
   // Postes.
+  ctx.fillStyle = '#05070d'
+  ctx.fillRect(left - 7, COURT.netY - 15, 6, 30)
+  ctx.fillRect(right + 1, COURT.netY - 15, 6, 30)
   ctx.fillStyle = '#cfd8ee'
-  ctx.fillRect(left - 4, COURT.netY - 11, 3, 22)
-  ctx.fillRect(right + 1, COURT.netY - 11, 3, 22)
-  ctx.fillStyle = '#ffd166'
-  ctx.fillRect(left - 4, COURT.netY - 11, 3, 3)
-  ctx.fillRect(right + 1, COURT.netY - 11, 3, 3)
+  ctx.fillRect(left - 6, COURT.netY - 14, 4, 28)
+  ctx.fillRect(right + 2, COURT.netY - 14, 4, 28)
+  ctx.fillStyle = teams.away.kit.trim
+  ctx.fillRect(left - 6, COURT.netY - 14, 4, 3)
+  ctx.fillStyle = teams.home.kit.trim
+  ctx.fillRect(right + 2, COURT.netY - 14, 4, 3)
 
-  ctx.font = '700 8px "Courier New", monospace'
+  ctx.font = '700 7px "Courier New", monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillStyle = 'rgba(232, 238, 252, 0.9)'
-  ctx.fillText('RED', COURT.width / 2, COURT.netY - 8)
+  ctx.fillStyle = 'rgba(232, 238, 252, 0.82)'
+  ctx.fillText('RED', COURT.width / 2, COURT.netY - 9)
 }
 
 const drawShadow = (
@@ -227,6 +350,21 @@ const drawShadow = (
   ctx.restore()
 }
 
+const drawVignette = (ctx: CanvasRenderingContext2D) => {
+  const gradient = ctx.createRadialGradient(
+    COURT.width / 2,
+    COURT.height / 2,
+    130,
+    COURT.width / 2,
+    COURT.height / 2,
+    300,
+  )
+  gradient.addColorStop(0, 'rgba(0, 0, 0, 0)')
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0.34)')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, COURT.width, COURT.height)
+}
+
 const rect = (
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -237,6 +375,100 @@ const rect = (
 ) => {
   ctx.fillStyle = fill
   ctx.fillRect(Math.round(x), Math.round(y), width, height)
+}
+
+type Camera = {
+  x: number
+  y: number
+  zoom: number
+}
+
+const FULL_CAMERA: Camera = {
+  x: COURT.width / 2,
+  y: COURT.height / 2,
+  zoom: 1,
+}
+
+const clampAxis = (value: number, size: number, view: number): number => {
+  if (view >= size - 4) return size / 2
+  return Math.min(size - view / 2 - 2, Math.max(view / 2 + 2, value))
+}
+
+const clampCamera = (camera: Camera): Camera => {
+  const viewW = COURT.width / camera.zoom
+  const viewH = COURT.height / camera.zoom
+  return {
+    x: clampAxis(camera.x, COURT.width, viewW),
+    y: clampAxis(camera.y, COURT.height, viewH),
+    zoom: camera.zoom,
+  }
+}
+
+/** La cámara se acerca al contacto y vuelve a la cancha completa al cerrar. */
+const cameraTarget = (
+  beat: TimelineBeat | null,
+  actor: PlayerSample | null,
+  ball: BallSample,
+): Camera => {
+  if (!beat) return FULL_CAMERA
+
+  switch (beat.kind) {
+    case 'serve': {
+      const zoom = 1.45 + Math.min(1, Math.max(0, (ball.z - 22) / 36)) * 0.15
+      return {
+        x: ball.groundX,
+        y: ball.groundY - ball.z * 0.55 - 6,
+        zoom,
+      }
+    }
+    case 'receive': {
+      if (!actor) return FULL_CAMERA
+      const ballY = ball.groundY - ball.z * 0.35 - 6
+      return {
+        x: actor.x * 0.65 + ball.groundX * 0.35,
+        y: (actor.groundY - 18) * 0.65 + ballY * 0.35,
+        zoom: 1.55,
+      }
+    }
+    case 'set': {
+      if (!actor) return FULL_CAMERA
+      const ballY = ball.groundY - ball.z * 0.35 - 6
+      return {
+        x: actor.x * 0.62 + ball.groundX * 0.38,
+        y: (actor.groundY - 20) * 0.62 + ballY * 0.38,
+        zoom: 1.4,
+      }
+    }
+    case 'spike': {
+      if (!actor) return FULL_CAMERA
+      const blend = Math.min(
+        1,
+        Math.max(0, (ball.progress - 0.2) / 0.55),
+      )
+      return {
+        x: actor.x + (ball.groundX - actor.x) * blend,
+        y:
+          actor.groundY -
+          20 +
+          (ball.groundY - ball.z * 0.35 - 4 - (actor.groundY - 20)) *
+            blend,
+        zoom: 1.65,
+      }
+    }
+    case 'dig': {
+      if (!actor) return FULL_CAMERA
+      const ballY = ball.groundY - ball.z * 0.35 - 4
+      return {
+        x: actor.x * 0.62 + ball.groundX * 0.38,
+        y: (actor.groundY - 12) * 0.62 + ballY * 0.38,
+        zoom: 1.55,
+      }
+    }
+    case 'point':
+      return { x: COURT.width / 2, y: COURT.height / 2, zoom: 1.06 }
+    default:
+      return FULL_CAMERA
+  }
 }
 
 const drawBall = (
@@ -509,13 +741,20 @@ export const CourtCanvas = ({
   onCaption,
   onPoint,
   onEnd,
+  onCutIn,
+  muted = false,
 }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const callbacks = useRef({ onCaption, onPoint, onEnd })
+  const callbacks = useRef({ onCaption, onPoint, onEnd, onCutIn })
+  const mutedRef = useRef(muted)
 
   useEffect(() => {
-    callbacks.current = { onCaption, onPoint, onEnd }
-  }, [onCaption, onPoint, onEnd])
+    callbacks.current = { onCaption, onPoint, onEnd, onCutIn }
+  }, [onCaption, onPoint, onEnd, onCutIn])
+
+  useEffect(() => {
+    mutedRef.current = muted
+  }, [muted])
 
   const timeline = useMemo(
     () => buildTimeline(players, script, initialBall),
@@ -532,6 +771,11 @@ export const CourtCanvas = ({
     let lastCaption = ''
     let pointFired = false
     let ended = false
+    let lastBeatStart = -1
+    let lastCutIn = ''
+    let lastFrame = performance.now()
+    let artWaitFrames = 0
+    const camera: Camera = { ...FULL_CAMERA }
     const started = performance.now()
     const animated = timeline.total > 0
     const held = timeline.balls.length === 0
@@ -544,6 +788,64 @@ export const CourtCanvas = ({
       const live = beat && t >= beat.start && t < beat.end ? beat : null
       const ball = sampleBall(timeline, t)
       const active = beat?.caption ?? ''
+      let waitingForArt = false
+
+      const samples = players.map((player) => ({
+        player,
+        sample: samplePlayer(timeline, player.id, t),
+      }))
+      samples.sort((a, b) => a.sample.groundY - b.sample.groundY)
+      const actor = beat?.actorId
+        ? (samples.find(({ player }) => player.id === beat.actorId)?.sample ??
+          null)
+        : null
+
+      const wanted = clampCamera(cameraTarget(live, actor, ball))
+      const dt = Math.max(1, Math.min(48, now - lastFrame))
+      lastFrame = now
+      const cameraEase = 1 - Math.exp(-dt / 110)
+      camera.x += (wanted.x - camera.x) * cameraEase
+      camera.y += (wanted.y - camera.y) * cameraEase
+      camera.zoom += (wanted.zoom - camera.zoom) * cameraEase
+
+      if (live?.cutin) {
+        const key = `${live.start}:${live.cutin.kind}:${live.cutin.leftId}`
+        if (key !== lastCutIn) {
+          lastCutIn = key
+          callbacks.current.onCutIn?.(live.cutin, live.end - live.start)
+        }
+      }
+
+      if (live && live.start !== lastBeatStart) {
+        lastBeatStart = live.start
+        if (!mutedRef.current) {
+          switch (live.kind) {
+            case 'serve':
+              playCue(live.fx === 'hit' ? 'hit' : 'toss')
+              break
+            case 'receive':
+              playCue('receive')
+              break
+            case 'set':
+              playCue('set')
+              break
+            case 'spike':
+              playCue(live.fx === 'block' ? 'block' : 'spike')
+              break
+            case 'dig':
+              playCue('dig')
+              break
+            case 'point':
+              playCue('point')
+              break
+            case 'wait':
+              playCue('whistle')
+              break
+            default:
+              break
+          }
+        }
+      }
 
       let shakeX = 0
       let shakeY = 0
@@ -559,13 +861,10 @@ export const CourtCanvas = ({
       ctx.imageSmoothingEnabled = false
       ctx.clearRect(0, 0, COURT.width, COURT.height)
       ctx.translate(shakeX, shakeY)
-      drawCourt(ctx)
-
-      const samples = players.map((player) => ({
-        player,
-        sample: samplePlayer(timeline, player.id, t),
-      }))
-      samples.sort((a, b) => a.sample.groundY - b.sample.groundY)
+      ctx.translate(COURT.width / 2, COURT.height / 2)
+      ctx.scale(camera.zoom, camera.zoom)
+      ctx.translate(-camera.x, -camera.y)
+      drawCourt(ctx, teams)
 
       for (const { player, sample } of samples) {
         const active = live?.caption.includes(player.name) ?? false
@@ -589,6 +888,7 @@ export const CourtCanvas = ({
           )
           if (active) drawActiveRing(ctx, sample.x, sample.groundY)
         } else {
+          waitingForArt = true
           drawPlayer(
             ctx,
             player,
@@ -655,6 +955,8 @@ export const CourtCanvas = ({
         (ball.segment ? ball.progress : 0) * spinSpeed,
       )
 
+      const ballArt = loadImage(BALL_SHEET)
+      if (!ballArt) waitingForArt = true
       drawBall(
         ctx,
         ball.groundX + (held ? 11 : 0),
@@ -662,7 +964,7 @@ export const CourtCanvas = ({
         ball.z,
         t,
         spinPhase,
-        loadImage(BALL_SHEET),
+        ballArt,
       )
 
       if (
@@ -706,6 +1008,7 @@ export const CourtCanvas = ({
       }
 
       ctx.restore()
+      drawVignette(ctx)
 
       if (active && active !== lastCaption) {
         lastCaption = active
@@ -716,7 +1019,13 @@ export const CourtCanvas = ({
         callbacks.current.onPoint?.(beat.point)
       }
 
-      if (!animated) return
+      if (!animated) {
+        if (waitingForArt && artWaitFrames < 120) {
+          artWaitFrames += 1
+          raf = requestAnimationFrame(frame)
+        }
+        return
+      }
 
       if (t < timeline.total + tail) {
         raf = requestAnimationFrame(frame)

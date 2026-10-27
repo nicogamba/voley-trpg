@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import CourtScreen from '../src/court/CourtScreen'
+import CourtCutIn from '../src/court/CourtCutIn'
 import LadderScreen from '../src/court/LadderScreen'
 import { LADDER, EMPTY_PROGRESS } from '../src/court/ladder'
 import {
@@ -201,6 +202,8 @@ describe('pantalla de cancha v2', () => {
     const html = renderToString(
       <CourtScreen
         stage={LADDER[0]}
+        muted={false}
+        onToggleMuted={() => {}}
         onBack={() => {}}
         onFinish={() => {}}
       />,
@@ -261,6 +264,44 @@ describe('escalera de países', () => {
     )
     expect(html).toContain('BRASIL')
     expect(html).toContain('JUGAR LA FINAL')
+  })
+})
+
+describe('cut-in de duelo', () => {
+  const cutin = {
+    kind: 'serve' as const,
+    leftId: 'home-opposite',
+    rightId: 'away-libero',
+    leftLabel: 'SAQUE',
+    rightLabel: 'RECEPCIÓN',
+    move: 'SAQUE',
+  }
+
+  it('viaja con el beat hasta la línea de tiempo', () => {
+    const script: BeatSpec[] = [
+      {
+        ...DEMO_RALLY[1]!,
+        cutin,
+      },
+    ]
+    const cutTimeline = buildTimeline(DEMO_PLAYERS, script, INITIAL_BALL)
+    expect(beatAt(cutTimeline, 100)?.cutin).toEqual(cutin)
+  })
+
+  it('muestra los dos retratos y el VS', () => {
+    const html = renderToString(
+      <CourtCutIn
+        cutin={cutin}
+        players={DEMO_PLAYERS}
+        duration={800}
+        onSkip={() => {}}
+      />,
+    )
+    expect(html).toContain('SAQUE')
+    expect(html).toContain('RECEPCIÓN')
+    expect(html).toContain('MOLINA')
+    expect(html).toContain('SOUZA')
+    expect(html).toContain('VS')
   })
 })
 

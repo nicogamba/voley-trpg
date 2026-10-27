@@ -1,7 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ATTACK_AP_COST, ATTACK_LABEL } from '../engine'
 import type { AttackKind, DefenseScheme } from '../engine'
 import CourtCanvas from './CourtCanvas'
+import CourtCutIn from './CourtCutIn'
+import CourtSidebar from './CourtSidebar'
+import { primeAudio } from './audio'
 import { COURT, cellDistance, cellsOfSide, cellOrigin, sameCell, zoneOf } from './geometry'
 import type { LadderStage } from './ladder'
 import {
@@ -28,6 +31,7 @@ import type {
   CourtCell,
   CourtPlayer,
   CourtTeam,
+  CutInSpec,
   Side,
 } from './types'
 
@@ -35,6 +39,8 @@ type Props = {
   stage: LadderStage
   onBack: () => void
   onFinish: (won: boolean) => void
+  muted: boolean
+  onToggleMuted: () => void
 }
 
 type UiPhase =
@@ -119,7 +125,13 @@ const cellPosition = (target: CourtCell) => {
   }
 }
 
-export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
+export const CourtScreen = ({
+  stage,
+  onBack,
+  onFinish,
+  muted,
+  onToggleMuted,
+}: Props) => {
   const teams = useMemo(() => buildTeams(stage), [stage])
   const [roster, setRoster] = useState<CourtPlayer[]>(() =>
     buildSetupRoster(stage),
@@ -146,7 +158,58 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
   const [animation, setAnimation] = useState<Animation | null>(null)
   const [attackKind, setAttackKind] = useState<AttackKind | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [cutin, setCutin] = useState<{
+    spec: CutInSpec
+    duration: number
+  } | null>(null)
+  const [stamp, setStamp] = useState<{
+    key: number
+    title: string
+    side: Side
+  } | null>(null)
   const rngRef = useRef<Rng>(mulberry32(0x20261027))
+  const cutinTimer = useRef<number | null>(null)
+  const stampTimer = useRef<number | null>(null)
+
+  useEffect(
+    () => () => {
+      if (cutinTimer.current !== null) {
+        window.clearTimeout(cutinTimer.current)
+      }
+      if (stampTimer.current !== null) {
+        window.clearTimeout(stampTimer.current)
+      }
+    },
+    [],
+  )
+
+  const clearCutIn = () => {
+    if (cutinTimer.current !== null) {
+      window.clearTimeout(cutinTimer.current)
+      cutinTimer.current = null
+    }
+    setCutin(null)
+  }
+
+  const clearStamp = () => {
+    if (stampTimer.current !== null) {
+      window.clearTimeout(stampTimer.current)
+      stampTimer.current = null
+    }
+    setStamp(null)
+  }
+
+  const showCutIn = (spec: CutInSpec, duration: number) => {
+    const ms = Math.min(1200, Math.max(680, duration))
+    if (cutinTimer.current !== null) {
+      window.clearTimeout(cutinTimer.current)
+    }
+    setCutin({ spec, duration: ms })
+    cutinTimer.current = window.setTimeout(() => {
+      cutinTimer.current = null
+      setCutin(null)
+    }, ms)
+  }
 
   const homeCells = useMemo(() => cellsOfSide('home'), [])
 
@@ -206,6 +269,8 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
     setAttackKind(null)
     setCaption(SETUP_HINT)
     setNotice(null)
+    clearCutIn()
+    clearStamp()
     setSetupSeq((value) => value + 1)
     setRunId((value) => value + 1)
     setUi(nextDecision(fresh) === 'serve' ? 'serve' : 'wait')
@@ -218,6 +283,8 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
     setAttackKind(null)
     setSelectedId(null)
     setMove(null)
+    clearCutIn()
+    clearStamp()
     const decision = nextDecision(next)
     setUi(decision === 'end' ? 'ended' : decision)
     setRunId((value) => value + 1)
@@ -239,6 +306,8 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
     setAttackKind(null)
     setSelectedId(null)
     setMove(null)
+    clearCutIn()
+    clearStamp()
     setCaption(beats[0]?.caption ?? '')
     setRunId((value) => value + 1)
   }
@@ -262,7 +331,28 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
 
   const handlePoint = () => {
     const point = animation?.events.find((event) => event.type === 'POINT')
-    if (point?.type === 'POINT') setShownScore(point.score)
+    if (point?.type !== 'POINT') return
+    setShownScore(point.score)
+    const title =
+      point.reason === 'block'
+        ? '¡BLOQUEO!'
+        : point.reason === 'ace'
+          ? '¡ACE!'
+          : point.reason === 'cap'
+            ? '¡RALLY LARGO!'
+            : point.reason === 'error'
+              ? `¡ERROR DE ${
+                  teams[point.side === 'home' ? 'away' : 'home'].short
+                }!`
+              : '¡PUNTO!'
+    if (stampTimer.current !== null) {
+      window.clearTimeout(stampTimer.current)
+    }
+    setStamp({ key: Date.now(), title, side: point.side })
+    stampTimer.current = window.setTimeout(() => {
+      stampTimer.current = null
+      setStamp(null)
+    }, 1100)
   }
 
   const selectCell = (target: CourtCell) => {
@@ -635,10 +725,26 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
   }
 
   const showExit = ui !== 'setup' && ui !== 'ended'
+  const homeRoster = match.players.filter((player) => player.side === 'home')
+  const awayRoster = match.players.filter((player) => player.side === 'away')
 
   return (
-    <div className="court-shell scanlines">
-      <header className="court-hud">
+    <div className="court-arena">
+      <CourtSidebar
+        side="home"
+        team={teams.home}
+        players={homeRoster}
+        kicker={`${stage.round} · ${stage.city}`}
+        note={`A ${stage.targetScore} PUNTOS`}
+      />
+
+      <div
+        className="court-shell scanlines"
+        onPointerDown={() => {
+          if (!muted) primeAudio()
+        }}
+      >
+        <header className="court-hud">
         <TeamBlock team={teams.home} side="home" />
 
         <div className="court-score">
@@ -679,8 +785,10 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
               script={canvasScript}
               initialBall={canvasBall}
               teams={teams}
+              muted={muted}
               onCaption={setCaption}
               onPoint={animation ? handlePoint : undefined}
+              onCutIn={showCutIn}
               onEnd={
                 animation
                   ? finishAnimation
@@ -689,6 +797,26 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
                     : undefined
               }
             />
+
+            {cutin && (
+              <CourtCutIn
+                cutin={cutin.spec}
+                players={animation?.pre.players ?? match.players}
+                duration={cutin.duration}
+                onSkip={clearCutIn}
+              />
+            )}
+
+            {stamp && (
+              <div
+                key={stamp.key}
+                className={`court-stamp is-${stamp.side}`}
+                aria-hidden="true"
+              >
+                <strong>{stamp.title}</strong>
+                <span>{teams[stamp.side].short}</span>
+              </div>
+            )}
 
             {renderOverlay()}
           </div>
@@ -702,6 +830,14 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
             >
               {captionText}
             </p>
+            <button
+              type="button"
+              className="court-chip court-chip-icon"
+              onClick={onToggleMuted}
+              aria-label={muted ? 'Activar sonido' : 'Silenciar'}
+            >
+              {muted ? '🔇' : '🔊'}
+            </button>
             {showExit && (
               <button
                 type="button"
@@ -716,6 +852,16 @@ export const CourtScreen = ({ stage, onBack, onFinish }: Props) => {
       </div>
 
       {renderPanel()}
+      </div>
+
+      <CourtSidebar
+        side="away"
+        team={teams.away}
+        players={awayRoster}
+        kicker="RIVAL"
+        note={`ESTILO ${TEAMS[stage.rival].style}`}
+        commentary={captionText}
+      />
     </div>
   )
 }

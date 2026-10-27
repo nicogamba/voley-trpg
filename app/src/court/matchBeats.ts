@@ -112,12 +112,14 @@ export const matchBeats = (
 
   let lastBall: CourtCell = pre.ball
   let digTarget: CourtCell | null = null
+  let lastServerId: string | null = null
 
   for (const event of events) {
     switch (event.type) {
       case 'SERVE': {
         const server = getPlayer(event.serverId)
         const receiver = getPlayer(event.receiverId)
+        lastServerId = event.serverId
         const receiverMove =
           receiver && !sameCell(receiver.cell, event.target)
             ? move(event.receiverId!, event.target, 'receive', 420)
@@ -176,6 +178,17 @@ export const matchBeats = (
           actorId: event.playerId,
           pose: 'receive',
           fx: 'hit',
+          cutin:
+            receiver && lastServerId
+              ? {
+                  kind: 'serve',
+                  leftId: lastServerId,
+                  rightId: event.playerId,
+                  leftLabel: 'SAQUE',
+                  rightLabel: 'RECEPCIÓN',
+                  move: 'SAQUE',
+                }
+              : undefined,
           ball: {
             to: cloneCell(event.to),
             arc: 30,
@@ -249,6 +262,19 @@ export const matchBeats = (
         const blockedDrop = isBlocked
           ? cell(attacker?.side ?? 'away', 1, event.target.col)
           : event.target
+        const defenderId =
+          resolution.defenderId || resolution.blockerIds[0] || null
+        const cutin =
+          attacker && defenderId
+            ? {
+                kind: isBlocked ? ('block' as const) : ('attack' as const),
+                leftId: event.attackerId,
+                rightId: defenderId,
+                leftLabel: 'REMATE',
+                rightLabel: isBlocked ? 'BLOQUEO' : 'DEFENSA',
+                move: label.toUpperCase(),
+              }
+            : undefined
 
         push({
           kind: 'spike',
@@ -257,6 +283,7 @@ export const matchBeats = (
           actorId: event.attackerId,
           pose: 'spike',
           fx: isBlocked ? 'block' : 'hit',
+          cutin,
           moves,
           ball: {
             to: cloneCell(blockedDrop),

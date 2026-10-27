@@ -196,6 +196,8 @@ const App = () => {
         <CourtScreen
           key={stage.id}
           stage={stage}
+          muted={muted}
+          onToggleMuted={toggleMuted}
           onBack={() => setCourtScreen('ladder')}
           onFinish={(won) => {
             const next = recordResult(ladder, won)

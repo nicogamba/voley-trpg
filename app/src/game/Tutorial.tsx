@@ -85,7 +85,7 @@ export const TitleScreen = ({
         </button>
       </div>
     </div>
-    <p className="title-footer">MOBILE · UN SET · 4V4 · TECMO CUP</p>
+    <p className="title-footer">MOBILE · 4V4 · COPA ZONA 3</p>
   </div>
 )
 

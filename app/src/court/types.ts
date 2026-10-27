@@ -65,6 +65,16 @@ export type BeatKind =
   | 'move'
   | 'wait'
 
+/** Duelo que se muestra como cut-in durante un beat. */
+export type CutInSpec = {
+  kind: 'serve' | 'attack' | 'block'
+  leftId: string
+  rightId: string
+  leftLabel: string
+  rightLabel: string
+  move: string
+}
+
 export type BeatSpec = {
   kind: BeatKind
   duration: number
@@ -75,6 +85,7 @@ export type BeatSpec = {
   ball?: BallSpec
   fx?: 'hit' | 'block' | 'floor' | 'whistle'
   point?: Side
+  cutin?: CutInSpec
 }
 
 export type TeamKit = {
