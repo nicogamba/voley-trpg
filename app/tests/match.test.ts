@@ -4,10 +4,16 @@ import { cell, cellsOfSide } from '../src/court/geometry'
 import {
   MATCH_TARGET,
   attackCandidates,
+  attackFault,
+  attackFaultChance,
   attackOptions,
   attackTargetFor,
   defenseCandidates,
   isAttackAllowed,
+  serveFault,
+  serveFaultChance,
+  serveTargetForZone,
+  serveZoneRisk,
   type MatchState,
 } from '../src/court/match'
 import {
@@ -17,6 +23,7 @@ import {
   defend,
   legalServeTargets,
   nextDecision,
+  rotateSide,
   serve,
   serveAuto,
 } from '../src/court/matchEngine'
@@ -123,7 +130,7 @@ describe('motor de partido v2', () => {
       server: 'away',
       targetScore: MATCH_TARGET,
     })
-    const served = aiServe(pre, mulberry32(3))
+    const served = serve(pre, cell('home', 1, 2), mulberry32(3))
     const state = served.state
     expect(state.phase).toBe('ATTACK')
     const options = attackOptions(state)
@@ -355,5 +362,296 @@ describe('motor de partido v2', () => {
       }).ok,
     ).toBe(false)
     expect(cellsOfSide('away')).toHaveLength(12)
+  })
+
+  it('exige dos puntos de diferencia para cerrar el set', () => {
+    // Recepción rival muy débil: el saque fuerza un error y da el punto.
+    const roster = DEMO_PLAYERS.map((player) =>
+      player.side === 'away'
+        ? {
+            ...player,
+            stats: { ...player.stats, tecnica: 0 },
+          }
+        : player,
+    )
+    const state = createMatch({
+      roster,
+      playerSide: 'home',
+      server: 'home',
+      targetScore: 25,
+      startScore: { home: 24, away: 24 },
+    })
+    const target =
+      state.players.find((player) => player.id === 'away-setter')?.cell ??
+      cell('away', 0, 2)
+    const first = serve(state, target, mulberry32(1))
+    expect(first.state.score.home).toBe(25)
+    expect(first.state.phase).toBe('SERVE')
+    expect(first.state.winner).toBeNull()
+    expect(first.events.some((event) => event.type === 'MATCH_END')).toBe(false)
+
+    const second = serve(first.state, target, mulberry32(2))
+    expect(second.state.score.home).toBe(26)
+    expect(second.state.phase).toBe('END')
+    expect(second.state.winner).toBe('home')
+    expect(second.events.some((event) => event.type === 'MATCH_END')).toBe(
+      true,
+    )
+  })
+
+  it('arma un 6v6 con dos puntas y una rotación de seis', () => {
+    const state = create()
+    const home = state.players.filter((player) => player.side === 'home')
+    expect(home).toHaveLength(6)
+    expect(home.map((player) => player.id)).toEqual(
+      expect.arrayContaining(['home-wing-1', 'home-wing-2']),
+    )
+    expect(state.rotation.home).toHaveLength(6)
+    expect(state.rotation.home[0]).toBe('home-opposite')
+    expect(state.rotation.home[5]).toBe('home-libero')
+    expect(state.rotation.away).toHaveLength(6)
+  })
+
+  it('rota al ganar el saque y mantiene al líbero en zaga', () => {
+    const state = create()
+    rotateSide(state, 'home')
+    expect(state.rotation.home[0]).toBe('home-wing-1')
+    expect(state.rotation.home[5]).toBe('home-opposite')
+    expect([0, 4, 5]).toContain(
+      state.rotation.home.indexOf('home-libero'),
+    )
+    rotateSide(state, 'home')
+    expect([0, 4, 5]).toContain(
+      state.rotation.home.indexOf('home-libero'),
+    )
+    expect(state.rotation.home).toHaveLength(6)
+  })
+
+  it('la tensión paga los ataques y se gana con el punto', () => {
+    const state = createMatch({
+      roster: DEMO_PLAYERS,
+      playerSide: 'home',
+      server: 'home',
+      targetScore: MATCH_TARGET,
+      useTension: true,
+    })
+    state.phase = 'ATTACK'
+    state.possession = 'home'
+    state.setQuality = 2
+    state.ap = 3
+    state.hiddenScheme = 'wall'
+    expect(state.tension.home).toBe(30)
+    const result = attack(state, 'power', cell('away', 2, 0), () => 0, {
+      attackerId: 'home-opposite',
+    })
+    expect(result.state.tension.home).toBe(0)
+    expect(result.state.tension.away).toBe(40)
+  })
+
+  it('la recepción suma tensión', () => {
+    const state = createMatch({
+      roster: DEMO_PLAYERS,
+      playerSide: 'home',
+      server: 'away',
+      targetScore: MATCH_TARGET,
+      useTension: true,
+    })
+    const result = serve(state, cell('home', 2, 1), mulberry32(1))
+    expect(result.state.tension.home).toBeGreaterThan(30)
+  })
+
+  it('calcula el riesgo de fault de ataque', () => {
+    const attacker = DEMO_PLAYERS.find(
+      (player) => player.id === 'home-opposite',
+    )!
+    expect(attackFaultChance(attacker, 'power', 2)).toBeGreaterThan(0.08)
+    expect(attackFault(attacker, 'power', 2, 0)).toBe('out')
+    expect(attackFault(attacker, 'quick', 2, 0)).toBe('net')
+    expect(attackFault(attacker, 'power', 3, 0.99)).toBeNull()
+  })
+
+  it('un ataque afuera da el punto al rival', () => {
+    const state = create()
+    state.phase = 'ATTACK'
+    state.possession = 'home'
+    state.setQuality = 2
+    state.ap = 3
+    state.hiddenScheme = 'wall'
+    const result = attack(state, 'power', cell('away', 2, 0), () => 0, {
+      attackerId: 'home-opposite',
+    })
+    const attackEvent = result.events.find(
+      (event) => event.type === 'ATTACK',
+    )
+    expect(attackEvent?.type).toBe('ATTACK')
+    if (attackEvent?.type === 'ATTACK') {
+      expect(attackEvent.resolution.outcome).toBe('fault')
+      expect(attackEvent.resolution.fault).toBe('out')
+    }
+    expect(result.state.score.away).toBe(1)
+    expect(result.state.server).toBe('away')
+  })
+
+  it('un ataque rival afuera da el punto al jugador', () => {
+    const state = createMatch({
+      roster: DEMO_PLAYERS,
+      playerSide: 'home',
+      server: 'away',
+      targetScore: MATCH_TARGET,
+    })
+    state.phase = 'DEFEND'
+    state.possession = 'away'
+    state.setQuality = 2
+    state.ap = 3
+    state.hiddenAttack = {
+      attackerId: 'away-opposite',
+      kind: 'power',
+      target: cell('home', 2, 0),
+    }
+    const result = defend(state, 'wall', () => 0)
+    const attackEvent = result.events.find(
+      (event) => event.type === 'ATTACK',
+    )
+    expect(attackEvent?.type).toBe('ATTACK')
+    if (attackEvent?.type === 'ATTACK') {
+      expect(attackEvent.resolution.outcome).toBe('fault')
+      expect(attackEvent.resolution.fault).toBe('out')
+    }
+    expect(result.state.score.home).toBe(1)
+    expect(result.state.server).toBe('home')
+  })
+
+  it('mapea los destinos de saque a las zonas del rival', () => {
+    expect(serveTargetForZone('home', 1)).toEqual(cell('away', 2, 0))
+    expect(serveTargetForZone('home', 5)).toEqual(cell('away', 2, 3))
+    expect(serveTargetForZone('home', 6)).toEqual(cell('away', 2, 1))
+    expect(serveTargetForZone('home', 'short')).toEqual(cell('away', 0, 1))
+    expect(serveTargetForZone('away', 1)).toEqual(cell('home', 2, 3))
+    expect(serveTargetForZone('away', 5)).toEqual(cell('home', 2, 0))
+  })
+
+  it('calcula el riesgo de saque según stats y destino', () => {
+    const server = DEMO_PLAYERS.find(
+      (player) => player.id === 'home-opposite',
+    )!
+    expect(serveFaultChance(server, 'short')).toBeGreaterThan(0.15)
+    expect(serveZoneRisk(server, 'short')).toBe('alto')
+    expect(serveZoneRisk(server, 6)).toBe('bajo')
+    expect(serveFault(server, 'short', 0)).toBe('net')
+    expect(serveFault(server, 'short', 0.99)).toBeNull()
+    expect(serveFault(server, 1, 0)).toBe('out')
+  })
+
+  it('un saque a la red da el punto al que recibe', () => {
+    const state = create()
+    const server = state.players.find(
+      (player) => player.id === 'home-opposite',
+    )!
+    server.stats = { ...server.stats, tecnica: 0, potencia: 0 }
+    const target = serveTargetForZone('home', 'short')
+    const result = serve(state, target, () => 0, {}, 2, 'short')
+    const serveEvent = result.events.find(
+      (event) => event.type === 'SERVE',
+    )
+    expect(serveEvent?.type).toBe('SERVE')
+    if (serveEvent?.type === 'SERVE') {
+      expect(serveEvent.outcome).toBe('net')
+      expect(serveEvent.zone).toBe('short')
+    }
+    expect(result.state.score.away).toBe(1)
+    expect(result.state.score.home).toBe(0)
+    expect(result.state.server).toBe('away')
+    expect(result.state.rotation.away[0]).toBe('away-wing-1')
+    expect(result.state.phase).toBe('SERVE')
+    expect(
+      result.events.some(
+        (event) =>
+          event.type === 'POINT' &&
+          event.side === 'away' &&
+          event.reason === 'error',
+      ),
+    ).toBe(true)
+  })
+
+  it('una recepción exigida puede irse como free ball', () => {
+    const state = create()
+    const receiver = state.players.find(
+      (player) => player.id === 'away-opposite',
+    )!
+    receiver.stats = { ...receiver.stats, tecnica: 3 }
+    const target = serveTargetForZone('home', 1)
+    const result = serve(state, target, () => 0.5, {}, 2, 1)
+    expect(result.events.some((event) => event.type === 'FREE_BALL')).toBe(
+      true,
+    )
+    const receives = result.events.filter(
+      (event) => event.type === 'RECEIVE',
+    )
+    expect(receives).toHaveLength(2)
+    if (receives[0]?.type === 'RECEIVE') {
+      expect(receives[0].freeBall).toBe(true)
+    }
+    if (receives[1]?.type === 'RECEIVE') {
+      expect(receives[1].quality).toBe(3)
+    }
+    expect(result.state.possession).toBe('home')
+    expect(result.state.phase).toBe('ATTACK')
+    expect(result.state.ap).toBe(3)
+  })
+
+  it('una recepción exigida puede quedar para un compañero', () => {
+    const state = create()
+    const receiver = state.players.find(
+      (player) => player.id === 'away-opposite',
+    )!
+    receiver.stats = { ...receiver.stats, tecnica: 4 }
+    const setter = state.players.find(
+      (player) => player.id === 'away-setter',
+    )!
+    setter.cell = cell('away', 2, 1)
+    const target = serveTargetForZone('home', 1)
+    const result = serve(state, target, () => 0.5, {}, 2, 1)
+    const receive = result.events.find(
+      (event) => event.type === 'RECEIVE',
+    )
+    expect(receive?.type).toBe('RECEIVE')
+    if (receive?.type === 'RECEIVE') {
+      expect(receive.teammate).toBe(true)
+      expect(receive.freeBall).toBeUndefined()
+    }
+    expect(result.state.possession).toBe('away')
+    expect(result.state.phase).toBe('DEFEND')
+  })
+
+  it('marca el dig cuando el líbero recibe un saque potente', () => {
+    const state = create()
+    const target = serveTargetForZone('home', 6)
+    const result = serve(state, target, () => 0.5, {}, 2, 6)
+    const receive = result.events.find(
+      (event) => event.type === 'RECEIVE',
+    )
+    expect(receive?.type).toBe('RECEIVE')
+    if (receive?.type === 'RECEIVE') {
+      expect(receive.dig).toBe(true)
+    }
+  })
+
+  it('una recepción que no se controla es ace del sacador', () => {
+    const state = create()
+    const receiver = state.players.find(
+      (player) => player.id === 'away-opposite',
+    )!
+    receiver.stats = { ...receiver.stats, tecnica: 0 }
+    const target = serveTargetForZone('home', 1)
+    const result = serve(state, target, () => 0.5, {}, 2, 1)
+    const serveEvent = result.events.find(
+      (event) => event.type === 'SERVE',
+    )
+    expect(serveEvent?.type).toBe('SERVE')
+    if (serveEvent?.type === 'SERVE') {
+      expect(serveEvent.outcome).toBe('ace')
+    }
+    expect(result.state.score.home).toBe(1)
+    expect(result.state.server).toBe('home')
   })
 })

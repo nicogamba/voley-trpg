@@ -1,7 +1,7 @@
 import { ATTACK_LABEL } from '../engine'
 import type { AttackKind } from '../engine'
 import { cell, sameCell } from './geometry'
-import { qualityLabel } from './match'
+import { designatedServer, qualityLabel } from './match'
 import { TECHNIQUES } from './techniques'
 import type { MatchEvent, MatchState } from './match'
 import type { CourtTeam } from './types'
@@ -252,6 +252,7 @@ export const matchBeats = (
         const moveLabel = attackTechnique?.label ?? label.toUpperCase()
         const isBlocked = resolution.outcome === 'blocked'
         const isPoint = resolution.outcome === 'point'
+        const isFault = resolution.outcome === 'fault'
         const blockerIds = new Set(resolution.blockerIds)
         const moves: MoveSpec[] = resolution.blockerIds
           .map((id) => inPlace(id, 'block', 360, 18))
@@ -259,7 +260,7 @@ export const matchBeats = (
 
         const defender = getPlayer(resolution.defenderId)
         if (defender && !blockerIds.has(defender.id)) {
-          if (!isBlocked && !isPoint) {
+          if (!isBlocked && !isPoint && !isFault) {
             // El dig se mueve en su propio beat; acá solo marcamos el destino.
             digTarget = cloneCell(event.target)
           } else if (isPoint) {
@@ -298,17 +299,19 @@ export const matchBeats = (
         push({
           kind: 'spike',
           duration: 900,
-          caption: `${moveLabel} · ${playerName(attacker, 'ATAQUE')}`,
+          caption: isFault
+            ? `${resolution.fault === 'net' ? 'A LA RED' : 'AFUERA'} · ${playerName(attacker, 'ATAQUE')}`
+            : `${moveLabel} · ${playerName(attacker, 'ATAQUE')}`,
           actorId: event.attackerId,
           pose: 'spike',
-          fx: isBlocked ? 'block' : 'hit',
+          fx: isFault ? 'floor' : isBlocked ? 'block' : 'hit',
           cutin,
           moves,
           ball: {
             to: cloneCell(blockedDrop),
             arc: isBlocked ? 18 : 8,
             zFrom: 36,
-            zTo: isBlocked ? 12 : isPoint ? 0 : 14,
+            zTo: isFault ? 0 : isBlocked ? 12 : isPoint ? 0 : 14,
             duration: 340,
             delay: 300,
             kind: 'spike',
@@ -360,10 +363,7 @@ export const matchBeats = (
   }
 
   if (!final && post.phase === 'SERVE') {
-    const server = post.players.find(
-      (player) =>
-        player.side === post.server && player.classId === 'opposite',
-    )
+    const server = designatedServer(post, post.server)
     const resetMoves = post.players
       .map((player) =>
         sameCell(at[player.id], player.cell)

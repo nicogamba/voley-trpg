@@ -4,8 +4,10 @@ import CommandMenu from './game/CommandMenu'
 import DuelCutIn from './game/DuelCutIn'
 import CourtScreen from './court/CourtScreen'
 import LadderScreen from './court/LadderScreen'
+import Ct1Screen from './presentation/Ct1Screen'
 import {
   EMPTY_PROGRESS,
+  LADDER,
   loadProgress,
   recordResult,
   saveProgress,
@@ -84,6 +86,12 @@ const App = () => {
   const [courtScreen, setCourtScreen] = useState<'none' | 'ladder' | 'match'>(
     'none',
   )
+  const [ct1Demo, setCt1Demo] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('ct1') === '1',
+  )
+  const [campaignMode, setCampaignMode] = useState<'v2' | 'ct1'>('v2')
   const [ladder, setLadder] = useState<LadderProgress>(loadProgress)
 
   const playerTurn = isPlayerTurn(game)
@@ -189,9 +197,44 @@ const App = () => {
     }
   }
 
+  const finishStage = (won: boolean) => {
+    const next = recordResult(ladder, won)
+    setLadder(next)
+    saveProgress(next)
+    setCourtScreen('ladder')
+  }
+
+  if (ct1Demo) {
+    // La demo usa la final: el rival más fuerte para probar la presión.
+    const stage = LADDER[LADDER.length - 1] ?? stageAt(EMPTY_PROGRESS)
+    if (stage) {
+      return (
+        <Ct1Screen
+          stage={stage}
+          muted={muted}
+          onBack={() => setCt1Demo(false)}
+          onFinish={() => setCt1Demo(false)}
+          onToggleMuted={toggleMuted}
+        />
+      )
+    }
+  }
+
   if (courtScreen === 'match') {
     const stage = stageAt(ladder)
     if (stage) {
+      if (campaignMode === 'ct1') {
+        return (
+          <Ct1Screen
+            key={stage.id}
+            stage={stage}
+            muted={muted}
+            onToggleMuted={toggleMuted}
+            onBack={() => setCourtScreen('ladder')}
+            onFinish={finishStage}
+          />
+        )
+      }
       return (
         <CourtScreen
           key={stage.id}
@@ -199,12 +242,7 @@ const App = () => {
           muted={muted}
           onToggleMuted={toggleMuted}
           onBack={() => setCourtScreen('ladder')}
-          onFinish={(won) => {
-            const next = recordResult(ladder, won)
-            setLadder(next)
-            saveProgress(next)
-            setCourtScreen('ladder')
-          }}
+          onFinish={finishStage}
         />
       )
     }
@@ -215,6 +253,7 @@ const App = () => {
     return (
       <LadderScreen
         progress={ladder}
+        ct1={campaignMode === 'ct1'}
         onPlay={() => setCourtScreen('match')}
         onBack={() => setCourtScreen('none')}
         onReset={() => {
@@ -240,7 +279,14 @@ const App = () => {
           }}
           onToggleMuted={toggleMuted}
           onHelp={() => setHelpOpen(true)}
-          onCourt={() => setCourtScreen('ladder')}
+          onCourt={() => {
+            setCampaignMode('v2')
+            setCourtScreen('ladder')
+          }}
+          onCt1={() => {
+            setCampaignMode('ct1')
+            setCourtScreen('ladder')
+          }}
         />
         {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       </>

@@ -13,6 +13,7 @@ export type Cue =
   | 'point'
   | 'crowd'
   | 'whistle'
+  | 'blip'
 
 let audio: AudioContext | null = null
 let noiseBuffer: AudioBuffer | null = null
@@ -266,6 +267,15 @@ export const playCue = (cue: Cue) => {
         type: 'square',
         gain: 0.03,
         delay: 0.15,
+      })
+      break
+    case 'blip':
+      tone(context, {
+        frequency: 880,
+        endFrequency: 740,
+        duration: 0.035,
+        type: 'square',
+        gain: 0.012,
       })
       break
   }

@@ -13,6 +13,7 @@ export const CLASS_STATS: Record<ClassId, Stats> = {
   middle: { tecnica: 2, potencia: 4, velocidad: 3, lectura: 5 },
   opposite: { tecnica: 2, potencia: 5, velocidad: 4, lectura: 3 },
   libero: { tecnica: 5, potencia: 1, velocidad: 5, lectura: 5 },
+  wing: { tecnica: 3, potencia: 4, velocidad: 4, lectura: 3 },
 }
 
 export const CLASS_NAMES: Record<ClassId, string> = {
@@ -20,6 +21,7 @@ export const CLASS_NAMES: Record<ClassId, string> = {
   middle: 'Central',
   opposite: 'Opuesto',
   libero: 'Líbero',
+  wing: 'Punta',
 }
 
 export const CLASS_LETTERS: Record<ClassId, string> = {
@@ -27,6 +29,7 @@ export const CLASS_LETTERS: Record<ClassId, string> = {
   middle: 'C',
   opposite: 'O',
   libero: 'L',
+  wing: 'P',
 }
 
 export const CLASS_ORDER: ClassId[] = [
@@ -41,6 +44,7 @@ export const FORMATION: Record<ClassId, { row: Row; col: Col }> = {
   middle: { row: 0, col: 0 },
   opposite: { row: 1, col: 2 },
   libero: { row: 1, col: 1 },
+  wing: { row: 1, col: 0 },
 }
 
 export const TARGET_SCORE = 7

@@ -7,6 +7,7 @@ const CLASS_ACCENT: Record<ClassId, string> = {
   middle: '#ffd166',
   opposite: '#ff8fa3',
   libero: '#67d8ef',
+  wing: '#c9a0ff',
 }
 
 type BoardProps = {

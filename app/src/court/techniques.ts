@@ -141,6 +141,7 @@ const ATTACK_BY_CLASS: Record<ClassId, TechniqueId[]> = {
   middle: ['desliz', 'gancho'],
   opposite: ['martillo', 'cometa'],
   libero: [],
+  wing: ['martillo', 'cometa'],
 }
 
 const DEFENSE_BY_CLASS: Record<ClassId, TechniqueId[]> = {
@@ -148,6 +149,7 @@ const DEFENSE_BY_CLASS: Record<ClassId, TechniqueId[]> = {
   middle: ['techo', 'muro'],
   opposite: ['piso'],
   libero: ['zambullida', 'lectura'],
+  wing: ['piso'],
 }
 
 export const techniquesFor = (

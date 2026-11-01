@@ -1,5 +1,6 @@
 import { AI_STANDARD, type AiTuning } from './match'
 import type { TeamId } from './teams'
+import type { Side } from './types'
 
 export type LadderStage = {
   id: string
@@ -8,6 +9,8 @@ export type LadderStage = {
   round: string
   final?: boolean
   targetScore: number
+  /** Marcador inicial del set decisivo CT1. */
+  startScore: Record<Side, number>
   /** Ajuste del rival en potencia, velocidad y lectura. */
   boost: number
   /** Ajuste aparte de técnica: mueve recepción y armado. */
@@ -26,6 +29,7 @@ export const LADDER: LadderStage[] = [
     city: 'SANTIAGO',
     round: 'DEBUT',
     targetScore: 5,
+    startScore: { home: 18, away: 18 },
     boost: -0.5,
     techBoost: 0,
     ai: { tolerance: 3.4, noise: 0.32, adapt: 0.1, jitter: 0.8, apBonus: 0 },
@@ -36,6 +40,7 @@ export const LADDER: LadderStage[] = [
     city: 'MILÁN',
     round: 'OCTAVOS',
     targetScore: 5,
+    startScore: { home: 17, away: 18 },
     boost: -0.1,
     techBoost: 0,
     ai: { tolerance: 3.0, noise: 0.26, adapt: 0.2, jitter: 0.7, apBonus: 0 },
@@ -46,6 +51,7 @@ export const LADDER: LadderStage[] = [
     city: 'TOKIO',
     round: 'CUARTOS',
     targetScore: 7,
+    startScore: { home: 17, away: 19 },
     boost: -0.1,
     techBoost: 0.25,
     ai: { tolerance: 2.6, noise: 0.2, adapt: 0.3, jitter: 0.6, apBonus: 0 },
@@ -56,6 +62,7 @@ export const LADDER: LadderStage[] = [
     city: 'LOS ÁNGELES',
     round: 'SEMIFINAL',
     targetScore: 7,
+    startScore: { home: 16, away: 19 },
     boost: 0,
     techBoost: 0,
     ai: { tolerance: 2.2, noise: 0.14, adapt: 0.4, jitter: 0.5, apBonus: 0 },
@@ -67,6 +74,7 @@ export const LADDER: LadderStage[] = [
     round: 'FINAL',
     final: true,
     targetScore: 7,
+    startScore: { home: 16, away: 20 },
     boost: 0,
     techBoost: 0,
     ai: { tolerance: 2.2, noise: 0.14, adapt: 0.4, jitter: 0.5, apBonus: 1 },

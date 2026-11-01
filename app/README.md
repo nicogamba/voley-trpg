@@ -1,8 +1,8 @@
 # ZONA 3
 
-Vóley táctico por turnos, mobile-first y jugable en el navegador. Un set a 7,
-4v4 y resolución determinista: no hay dados. La tensión está en leer la jugada
-rival y comprometerse antes de ver el resultado.
+Vóley táctico por turnos, mobile-first y jugable en el navegador. Un set
+decisivo a 25, 6v6 y resolución determinista: no hay dados. La tensión está en
+leer la jugada rival y comprometerse antes de ver el resultado.
 
 ## Estado
 
@@ -12,9 +12,94 @@ rival y comprometerse antes de ver el resultado.
   bloqueado 700 ms y franja **ÚLTIMA** para releer la jugada.
 - **v1.3.2 “Ritmo”**: los turnos de la IA (saque, recepción y armado rival)
   esperan **CONTINUAR** y narran el último movimiento.
-- 70 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
+- **S1 “Shell CT1” (demo)**: pantalla partida, comando → cuadro de acción →
+  relato → resultado. Set a 25 desde 17-19, motor **6v6** con rotación
+  side-out y líbero en zaga.
+- 139 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
 - Balance simulado con 500 partidos IA vs IA (ver más abajo).
 - Pendiente: playtest con 5 personas y deploy en Vercel.
+
+## Demo CT1 (S1)
+
+La maqueta de sensación estilo Captain Tsubasa 1 vive en
+`src/presentation/`. Se entra desde la portada con **CT1 · DEMO DE SENSACIÓN**
+o agregando `?ct1=1` a la URL.
+
+- Pantalla partida: acción arriba, relator y comandos abajo.
+- El jugador elige un comando y después ve la jugada; el resultado aparece en
+  el cuadro siguiente.
+- La campaña recorre las **5 etapas** de la escalera; cada una arranca en su
+  marcador inicial (18-18, 17-18, 17-19, 16-19, 16-20), con **saque local** y
+  previa de Nando. La demo rápida `?ct1=1` juega la final desde 16-20.
+- **Saque por destino:** zona 1, 5, 6 o corto. El riesgo de red/afuera sale de
+  los stats del sacador y del destino.
+- **Recepción:** perfecta, buena, exigida, dig, cayó en un compañero, free ball,
+  red o afuera.
+- **Free ball:** el rival recibe con calidad 3 y arma cómodo para atacar.
+- **Tensión 0-100:** reemplaza la energía AP en CT1. Paga potencia, wipe y
+  pipe; sube con buenas recepciones y puntos.
+- **Stats debajo del retrato:** TEC, POT, VEL y LEC en la tarjeta del jugador.
+- El primer toque completa el texto del relator; el segundo avanza.
+- Los cuadros y el relator ya usan el arte generado; las técnicas especiales
+  siguen pendientes.
+
+El motor ya es **6v6 con rotación**, saque local, tensión y campaña de 5
+etapas. También puede fallar el ataque (afuera o a la red). Falta arte final,
+relator contextual, playtest y deploy.
+
+### Arte de acción
+
+Los 4 rostros de `art-source/principal/portraits.jpeg` ya están asignados a las
+4 clases en `tools/prepare-sprites.py`: setter, opposite, middle y libero.
+Para las poses de acción se genera una imagen por **clase + pose**, no por
+jugador, con el kit cromático que usa el resto del arte:
+
+- camiseta magenta, short cian, vivos amarillos;
+- el líbero invierte camiseta y vivos;
+- fondo de estadio oscuro, sin verdes ni luces magenta/cian/amarillas;
+- pelota blanca/gris.
+
+Después se recolorean todos los equipos con:
+
+```bash
+python3 tools/prepare-action.py --team arg --team bra
+```
+
+La entrada va en `art-source/actions/<clase>/<pose>.png` y la salida en
+`app/src/assets/action/<equipo>/<clase>-<pose>.png`, a 720×640. El script
+cuantiza la imagen, reemplaza solo los colores del kit y conserva piel, pelo,
+pelota, fondo y sombreado.
+
+Los **planos compartidos** (sin equipo) se preparan con:
+
+```bash
+python3 tools/prepare-shots.py
+```
+
+Toma los planos de `art-source/principal/` (saque, duelo, bloqueo,
+recepción, armado, dig, punto, error, free ball, festejo y derrota), los
+recorta a 1.125:1 y los deja en `app/src/assets/action/shared/`. La pantalla
+CT1 usa esos planos en las decisiones y en la acción. La cancha ya no aparece
+en el modo CT1.
+
+Los retratos propios de cada equipo salen de las sheets:
+
+```bash
+python3 tools/prepare-portraits.py
+```
+
+Deja 6 retratos por equipo en
+`app/src/assets/sprites/portraits/teams/`. El `CommandBox` los usa cuando
+conoce el equipo del jugador.
+
+El relator se recorta con:
+
+```bash
+python3 tools/prepare-nando.py
+```
+
+Deja las 5 expresiones en `app/src/assets/sprites/commentator/` y el
+`CommentBox` las usa según la línea de Nando.
 
 ## Cómo jugar
 
@@ -75,7 +160,7 @@ npm run dev
 El servidor queda en `http://127.0.0.1:5173/` (o el siguiente puerto libre).
 
 ```bash
-npm test        # 70 tests: motor, comandos, store, simulación y render
+npm test        # 139 tests: motor, comandos, store, simulación, escenas y render
 npm run build   # tsc -b && vite build
 npm run lint    # oxlint
 npm run preview # sirve dist/
@@ -85,10 +170,12 @@ npm run preview # sirve dist/
 
 ```
 app/
-  src/engine/     motor puro: tipos, reglas, geometría, resolución, reducer, IA, simulador
-  src/game/       store de Zustand, tablero, menús, cut-in, tutorial, retratos y sonido
-  src/App.tsx     layout vertical, HUD y orquestación de fases
-  tests/          tests del motor, comandos, store, simulación y render
+  src/engine/        motor puro: tipos, reglas, geometría, resolución, reducer, IA, simulador
+  src/game/          store de Zustand, tablero, menús, cut-in, tutorial, retratos y sonido
+  src/court/         cancha v2: motor de partido, escalera, sprites y coreografía
+  src/presentation/  shell CT1: escenas, cuadros de acción, relator y comandos
+  src/App.tsx        layout vertical, HUD y orquestación de fases
+  tests/             tests del motor, comandos, store, simulación, escenas y render
 gdd_v1.3.md          GDD vigente: diseño, fórmulas, IA, métricas y riesgos
 hoja_de_numeros.md   fuente de verdad de las fórmulas y tablas de balance v1.3
 gdd_v1.1.md          GDD v1.2 histórico (movimiento y preview A/B/D)
@@ -121,6 +208,8 @@ npx vitest run tests/simulate.test.ts --silent=false
 
 ## Próximos pasos
 
+- **S3:** arte final, relator contextual, intro/cierre de partido y QA en
+  360×640 / 390×844.
 - Playtest de 5 personas con el guion y la planilla de `playtest.md`.
 - Ajustar una sola palanca por iteración con la simulación de 500 partidos.
 - Sprites pixel art y arte de fondo después de validar el loop con placeholders

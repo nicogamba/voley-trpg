@@ -6,6 +6,8 @@ export type TeamId = 'arg' | 'chi' | 'ita' | 'jpn' | 'usa' | 'bra'
 
 export type RosterEntry = {
   classId: ClassId
+  /** Id corto para distinguir dos jugadores de la misma clase. */
+  id?: string
   name: string
   /** Ajuste fino sobre las stats base de la clase. */
   stats?: Partial<Stats>
@@ -34,6 +36,8 @@ export const TEAMS: Record<TeamId, TeamDef> = {
       { classId: 'middle', name: 'QUINTANA' },
       { classId: 'opposite', name: 'MOLINA' },
       { classId: 'libero', name: 'SOSA' },
+      { classId: 'wing', id: 'wing-1', name: 'BENÍTEZ' },
+      { classId: 'wing', id: 'wing-2', name: 'LUCERO' },
     ],
   },
   chi: {
@@ -48,6 +52,8 @@ export const TEAMS: Record<TeamId, TeamDef> = {
       { classId: 'middle', name: 'PARRAGUI' },
       { classId: 'opposite', name: 'SOTO' },
       { classId: 'libero', name: 'MUNOZ' },
+      { classId: 'wing', id: 'wing-1', name: 'ROJAS' },
+      { classId: 'wing', id: 'wing-2', name: 'VIDAL' },
     ],
   },
   ita: {
@@ -62,6 +68,8 @@ export const TEAMS: Record<TeamId, TeamDef> = {
       { classId: 'middle', name: 'RUSSO' },
       { classId: 'opposite', name: 'MICHELI' },
       { classId: 'libero', name: 'BALSO' },
+      { classId: 'wing', id: 'wing-1', name: 'MORETTI' },
+      { classId: 'wing', id: 'wing-2', name: 'FABBRI' },
     ],
   },
   jpn: {
@@ -76,6 +84,8 @@ export const TEAMS: Record<TeamId, TeamDef> = {
       { classId: 'middle', name: 'NISHIO' },
       { classId: 'opposite', name: 'TAKEDA' },
       { classId: 'libero', name: 'MOTOYAMA' },
+      { classId: 'wing', id: 'wing-1', name: 'KANDA' },
+      { classId: 'wing', id: 'wing-2', name: 'OZAKI' },
     ],
   },
   usa: {
@@ -90,6 +100,8 @@ export const TEAMS: Record<TeamId, TeamDef> = {
       { classId: 'middle', name: 'HOLTAN' },
       { classId: 'opposite', name: 'ANDRES' },
       { classId: 'libero', name: 'SHOJI' },
+      { classId: 'wing', id: 'wing-1', name: 'BAKER' },
+      { classId: 'wing', id: 'wing-2', name: 'REED' },
     ],
   },
   bra: {
@@ -104,6 +116,8 @@ export const TEAMS: Record<TeamId, TeamDef> = {
       { classId: 'middle', name: 'COSTA' },
       { classId: 'opposite', name: 'ALVES' },
       { classId: 'libero', name: 'SOUZA' },
+      { classId: 'wing', id: 'wing-1', name: 'MARQUES' },
+      { classId: 'wing', id: 'wing-2', name: 'OLIVEIRA' },
     ],
   },
 }
@@ -113,16 +127,23 @@ const BASE_STATS: Record<ClassId, Stats> = {
   middle: { tecnica: 2, potencia: 4, velocidad: 3, lectura: 5 },
   opposite: { tecnica: 2, potencia: 5, velocidad: 4, lectura: 3 },
   libero: { tecnica: 5, potencia: 1, velocidad: 5, lectura: 5 },
+  wing: { tecnica: 3, potencia: 4, velocidad: 4, lectura: 3 },
 }
 
 const roundStat = (value: number): number => Math.round(value * 10) / 10
 
+type Slot = { row: 0 | 1 | 2; col: 0 | 1 | 2 | 3 }
+
 /** Fila y columna de la formación base del lado local. */
-const HOME_SLOT: Record<ClassId, { row: 0 | 1 | 2; col: 0 | 1 | 2 | 3 }> = {
+const HOME_SLOT: Record<ClassId, Slot | Slot[]> = {
   setter: { row: 0, col: 1 },
   middle: { row: 0, col: 0 },
   opposite: { row: 2, col: 3 },
   libero: { row: 2, col: 1 },
+  wing: [
+    { row: 0, col: 3 },
+    { row: 2, col: 0 },
+  ],
 }
 
 export type FormationId = 'base' | 'reception' | 'block'
@@ -139,7 +160,7 @@ export const FORMATION_OPTIONS: {
 
 const FORMATION_SLOTS: Record<
   FormationId,
-  Record<ClassId, { row: 0 | 1 | 2; col: 0 | 1 | 2 | 3 }>
+  Record<ClassId, Slot | Slot[]>
 > = {
   base: HOME_SLOT,
   reception: {
@@ -147,12 +168,20 @@ const FORMATION_SLOTS: Record<
     middle: { row: 0, col: 1 },
     opposite: { row: 0, col: 2 },
     libero: { row: 2, col: 2 },
+    wing: [
+      { row: 0, col: 0 },
+      { row: 2, col: 0 },
+    ],
   },
   block: {
     setter: { row: 2, col: 0 },
     middle: { row: 0, col: 1 },
     opposite: { row: 0, col: 2 },
     libero: { row: 2, col: 3 },
+    wing: [
+      { row: 0, col: 0 },
+      { row: 2, col: 1 },
+    ],
   },
 }
 
@@ -160,15 +189,22 @@ const FORMATION_SLOTS: Record<
 export const applyFormation = (
   players: CourtPlayer[],
   formationId: FormationId,
-): CourtPlayer[] =>
-  players.map((player) => {
+): CourtPlayer[] => {
+  const counters: Partial<Record<ClassId, number>> = {}
+  return players.map((player) => {
     if (player.side !== 'home') return player
-    const slot = FORMATION_SLOTS[formationId][player.classId]
+    const slots = FORMATION_SLOTS[formationId][player.classId]
+    const index = counters[player.classId] ?? 0
+    counters[player.classId] = index + 1
+    const slot = Array.isArray(slots)
+      ? slots[Math.min(index, slots.length - 1)]
+      : slots
     return {
       ...player,
       cell: cell('home', slot.row, slot.col),
     }
   })
+}
 
 /**
  * Arma el plantel de un equipo. `boost` sube todas las stats por igual y
@@ -181,9 +217,15 @@ export const buildRoster = (
   techBoost = 0,
 ): CourtPlayer[] => {
   const team = TEAMS[teamId]
+  const counters: Partial<Record<ClassId, number>> = {}
   return team.roster.map((entry) => {
     const base = BASE_STATS[entry.classId]
-    const slot = HOME_SLOT[entry.classId]
+    const slots = HOME_SLOT[entry.classId]
+    const index = counters[entry.classId] ?? 0
+    counters[entry.classId] = index + 1
+    const slot = Array.isArray(slots)
+      ? slots[Math.min(index, slots.length - 1)]
+      : slots
     // La técnica queda aparte: mueve umbrales de recepción de golpe.
     const stats: Stats = {
       tecnica: roundStat(
@@ -198,7 +240,7 @@ export const buildRoster = (
       lectura: roundStat(base.lectura + boost + (entry.stats?.lectura ?? 0)),
     }
     return {
-      id: `${side}-${entry.classId}`,
+      id: `${side}-${entry.id ?? entry.classId}`,
       side,
       classId: entry.classId,
       name: entry.name,

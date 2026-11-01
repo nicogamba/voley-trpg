@@ -8,6 +8,7 @@ type TitleProps = {
   onToggleMuted: () => void
   onHelp: () => void
   onCourt: () => void
+  onCt1: () => void
 }
 
 const CourtMark = () => (
@@ -33,6 +34,7 @@ export const TitleScreen = ({
   onToggleMuted,
   onHelp,
   onCourt,
+  onCt1,
 }: TitleProps) => (
   <div className="title-shell">
     <div className="title-card scanlines">
@@ -62,7 +64,7 @@ export const TitleScreen = ({
             <span>Leé la jugada y ganá el duelo.</span>
           </p>
           <p className="title-sub">
-            Un set a 7 · 4v4 · 5-8 minutos. Sin dados: stats, esquema y zona.
+            Un set decisivo a 25 · 6v6 · 5-8 minutos. Sin dados: stats y lectura.
           </p>
         </div>
         <PixelPortrait classId="libero" side="away" size={76} />
@@ -80,12 +82,15 @@ export const TitleScreen = ({
         <button type="button" onClick={onTutorial} className="pixel-btn ghost">
           TUTORIAL · V1
         </button>
+        <button type="button" onClick={onCt1} className="pixel-btn ghost">
+          CT1 · DEMO DE SENSACIÓN
+        </button>
         <button type="button" onClick={onHelp} className="pixel-btn ghost">
           CÓMO SE JUEGA
         </button>
       </div>
     </div>
-    <p className="title-footer">MOBILE · 4V4 · COPA ZONA 3</p>
+    <p className="title-footer">MOBILE · 6V6 · COPA ZONA 3</p>
   </div>
 )
 

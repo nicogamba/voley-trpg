@@ -15,6 +15,8 @@ type Props = {
   onPlay: () => void
   onBack: () => void
   onReset: () => void
+  /** Muestra el formato CT1: set a 25 con marcador inicial. */
+  ct1?: boolean
 }
 
 const STAT_KEYS = ['tecnica', 'potencia', 'velocidad', 'lectura'] as const
@@ -66,6 +68,7 @@ export const LadderScreen = ({
   onPlay,
   onBack,
   onReset,
+  ct1 = false,
 }: Props) => {
   const complete = isLadderComplete(progress)
   const stage = stageAt(progress)
@@ -218,7 +221,9 @@ export const LadderScreen = ({
             {`▶ JUGAR ${stage?.final ? 'LA FINAL' : `CON ${rival.short}`}`}
           </button>
           <p className="ladder-tip">
-            {`GANÁ ${stage?.targetScore} PUNTOS PARA AVANZAR`}
+            {ct1 && stage
+              ? `SET A 25 · INICIO ${stage.startScore.home}-${stage.startScore.away}`
+              : `GANÁ ${stage?.targetScore} PUNTOS PARA AVANZAR`}
           </p>
         </footer>
       )}

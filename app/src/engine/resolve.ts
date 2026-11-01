@@ -320,6 +320,7 @@ export const classLabel = (classId: ClassId): string => {
     middle: 'central',
     opposite: 'opuesto',
     libero: 'líbero',
+    wing: 'punta',
   }
   return labels[classId]
 }

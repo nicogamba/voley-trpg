@@ -8,7 +8,7 @@ export type Cell = {
   col: Col
 }
 
-export type ClassId = 'setter' | 'middle' | 'opposite' | 'libero'
+export type ClassId = 'setter' | 'middle' | 'opposite' | 'libero' | 'wing'
 
 export type Stats = {
   tecnica: number

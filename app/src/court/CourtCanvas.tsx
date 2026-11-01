@@ -28,6 +28,7 @@ const CLASS_ACCENT: Record<CourtPlayer['classId'], string> = {
   middle: '#ffd166',
   opposite: '#ff8fa3',
   libero: '#67d8ef',
+  wing: '#c9a0ff',
 }
 
 const CLASS_LETTER: Record<CourtPlayer['classId'], string> = {
@@ -35,6 +36,7 @@ const CLASS_LETTER: Record<CourtPlayer['classId'], string> = {
   middle: 'C',
   opposite: 'O',
   libero: 'L',
+  wing: 'P',
 }
 
 const ART_W = 48

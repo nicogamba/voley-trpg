@@ -6,6 +6,7 @@ const ROLE: Record<CourtPlayer['classId'], string> = {
   middle: 'CEN',
   opposite: 'OPU',
   libero: 'LÍB',
+  wing: 'PUN',
 }
 
 const ROLE_NAME: Record<CourtPlayer['classId'], string> = {
@@ -13,6 +14,7 @@ const ROLE_NAME: Record<CourtPlayer['classId'], string> = {
   middle: 'Central',
   opposite: 'Opuesto',
   libero: 'Líbero',
+  wing: 'Punta',
 }
 
 const STATS = [

@@ -13,7 +13,7 @@ import type {
   DefenseScheme,
   Quality,
 } from '../engine'
-import { cellDistance, cellsOfSide, otherSide } from './geometry'
+import { cell, cellDistance, cellsOfSide, otherSide } from './geometry'
 import { TECHNIQUES, type TechniqueId } from './techniques'
 import type { CourtCell, CourtPlayer, Side } from './types'
 
@@ -27,6 +27,111 @@ export const MATCH_AP_REFUND = 1
 export const MATCH_RALLY_CAP = 12
 /** Un saque se puede recibir hasta a dos celdas de distancia. */
 export const SERVE_REACH = 2
+
+/** Celdas de las posiciones 1-6, vistas desde cada lado. */
+export const ROTATION_CELLS: Record<Side, CourtCell[]> = {
+  home: [
+    cell('home', 2, 3),
+    cell('home', 0, 3),
+    cell('home', 0, 1),
+    cell('home', 0, 0),
+    cell('home', 2, 0),
+    cell('home', 2, 1),
+  ],
+  away: [
+    cell('away', 2, 0),
+    cell('away', 0, 0),
+    cell('away', 0, 2),
+    cell('away', 0, 3),
+    cell('away', 2, 3),
+    cell('away', 2, 2),
+  ],
+}
+
+/** Destinos de saque del menú CT1. */
+export type ServeZone = 1 | 5 | 6 | 'short'
+
+const SERVE_DIFFICULTY: Record<ServeZone, number> = {
+  1: 5,
+  5: 5,
+  6: 3.5,
+  short: 6.5,
+}
+
+export const serveZoneLabel = (zone: ServeZone): string =>
+  zone === 'short' ? 'CORTO' : `ZONA ${zone}`
+
+/**
+ * Traduce el destino elegido a una celda del campo rival. Las zonas se
+ * leen desde el equipo que recibe: 1 es su fondo derecho, 5 su fondo
+ * izquierdo, 6 el centro y corto la fila de red.
+ */
+export const serveTargetForZone = (
+  server: Side,
+  zone: ServeZone,
+): CourtCell => {
+  const receiving = otherSide(server)
+  if (zone === 'short') return cell(receiving, 0, 1)
+  if (receiving === 'away') {
+    if (zone === 1) return cell('away', 2, 0)
+    if (zone === 5) return cell('away', 2, 3)
+    return cell('away', 2, 1)
+  }
+  if (zone === 1) return cell('home', 2, 3)
+  if (zone === 5) return cell('home', 2, 0)
+  return cell('home', 2, 2)
+}
+
+/** Zona más cercana a un destino, para el saque automático de la IA. */
+export const serveZoneForTarget = (
+  server: Side,
+  target: CourtCell,
+): ServeZone => {
+  if (target.row === 0) return 'short'
+  const receiving = otherSide(server)
+  if (receiving === 'away') {
+    if (target.col === 0) return 1
+    if (target.col === 3) return 5
+    return 6
+  }
+  if (target.col === 3) return 1
+  if (target.col === 0) return 5
+  return 6
+}
+
+export const servePressure = (server: CourtPlayer): number =>
+  server.classId === 'setter' || server.classId === 'libero' ? 1 : 2
+
+/** Riesgo de que el saque se vaya a la red o afuera. */
+export const serveFaultChance = (
+  server: CourtPlayer,
+  zone: ServeZone,
+): number => {
+  const skill = server.stats.tecnica + server.stats.potencia * 0.5
+  const difficulty = SERVE_DIFFICULTY[zone]
+  return Math.min(0.35, Math.max(0.02, 0.04 + (difficulty - skill) * 0.09))
+}
+
+export const serveFault = (
+  server: CourtPlayer,
+  zone: ServeZone,
+  roll: number,
+): 'net' | 'out' | null =>
+  roll < serveFaultChance(server, zone)
+    ? zone === 'short'
+      ? 'net'
+      : 'out'
+    : null
+
+export const serveZoneRisk = (
+  server: CourtPlayer,
+  zone: ServeZone,
+): 'bajo' | 'medio' | 'alto' => {
+  const chance = serveFaultChance(server, zone)
+  if (chance >= 0.2) return 'alto'
+  if (chance >= 0.1) return 'medio'
+  return 'bajo'
+}
 
 export type MatchPhase = 'SERVE' | 'ATTACK' | 'DEFEND' | 'END'
 
@@ -42,7 +147,8 @@ export type DuelResolution = {
   D: number
   edge: number
   zone: number
-  outcome: 'point' | 'dig' | 'blocked'
+  outcome: 'point' | 'dig' | 'blocked' | 'fault'
+  fault?: 'net' | 'out'
   digQuality: Quality | null
   defenderId: string
   blockerIds: string[]
@@ -82,12 +188,18 @@ export type MatchState = {
   server: Side
   possession: Side
   score: Record<Side, number>
+  /** Tensión acumulada del set, 0-100. */
+  tension: Record<Side, number>
+  /** En CT1 la tensión reemplaza la energía por rally. */
+  useTension: boolean
   ap: number
   /** El jugador ya gastó su técnica defensiva en este rally. */
   defenseTechniqueUsed: boolean
   players: CourtPlayer[]
   /** Posiciones de arranque de cada rally. */
   formation: Record<string, CourtCell>
+  /** Orden de las posiciones 1-6 de cada lado. */
+  rotation: Record<Side, string[]>
   ball: CourtCell
   passQuality: Quality
   setQuality: Quality
@@ -112,7 +224,8 @@ export type MatchEvent =
       target: CourtCell
       receiverId: string | null
       quality: Quality | null
-      outcome: 'ok' | 'ace' | 'error'
+      outcome: 'ok' | 'ace' | 'net' | 'out'
+      zone?: ServeZone
     }
   | {
       type: 'RECEIVE'
@@ -120,6 +233,14 @@ export type MatchEvent =
       from: CourtCell
       to: CourtCell
       quality: Quality
+      freeBall?: boolean
+      teammate?: boolean
+      dig?: boolean
+    }
+  | {
+      type: 'FREE_BALL'
+      fromSide: Side
+      toSide: Side
     }
   | {
       type: 'SET'
@@ -157,6 +278,7 @@ export type MatchEvent =
 export const cloneState = (state: MatchState): MatchState => ({
   ...state,
   score: { ...state.score },
+  tension: { ...state.tension },
   players: state.players.map((player) => ({
     ...player,
     stats: { ...player.stats },
@@ -168,6 +290,10 @@ export const cloneState = (state: MatchState): MatchState => ({
       { ...target },
     ]),
   ),
+  rotation: {
+    home: [...state.rotation.home],
+    away: [...state.rotation.away],
+  },
   ball: { ...state.ball },
   hiddenAttack: state.hiddenAttack
     ? {
@@ -206,6 +332,15 @@ export const designatedServer = (
   state: MatchState,
   side: Side,
 ): CourtPlayer => {
+  const rotation = state.rotation?.[side]
+  if (rotation && rotation.length === 6) {
+    const first = playerById(state, rotation[0])
+    if (first && first.classId !== 'libero') return first
+    const middle = rotation
+      .map((id) => playerById(state, id))
+      .find((player) => player?.classId === 'middle')
+    if (middle) return middle
+  }
   const roster = playersOf(state, side)
   return (
     classOf(state, side, 'opposite') ??
@@ -294,6 +429,42 @@ export const attackBase = (
 /** Con cuatro columnas, las esquinas son 0 y 3; el centro es 1 y 2. */
 export const isCorner = (target: CourtCell): boolean =>
   target.col === 0 || target.col === 3
+
+const ATTACK_RISK: Record<AttackKind, number> = {
+  power: 0.02,
+  placement: -0.01,
+  quick: 0.02,
+  pipe: 0.03,
+  wipe: 0.01,
+  tip: -0.02,
+}
+
+/** Riesgo de que el ataque se vaya afuera o a la red. */
+export const attackFaultChance = (
+  attacker: CourtPlayer,
+  kind: AttackKind,
+  setQualityValue: Quality,
+): number => {
+  const technique = Math.max(0, 5 - attacker.stats.tecnica) * 0.015
+  const setPenalty =
+    setQualityValue <= 1 ? 0.06 : setQualityValue === 2 ? 0.02 : 0
+  return Math.min(
+    0.25,
+    Math.max(0.02, 0.04 + technique + setPenalty + ATTACK_RISK[kind]),
+  )
+}
+
+export const attackFault = (
+  attacker: CourtPlayer,
+  kind: AttackKind,
+  setQualityValue: Quality,
+  roll: number,
+): 'net' | 'out' | null => {
+  if (roll >= attackFaultChance(attacker, kind, setQualityValue)) return null
+  return kind === 'quick' || kind === 'pipe' || setQualityValue <= 1
+    ? 'net'
+    : 'out'
+}
 
 export const attackZoneBonus = (
   kind: AttackKind,

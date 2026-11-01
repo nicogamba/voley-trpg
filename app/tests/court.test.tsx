@@ -244,6 +244,21 @@ describe('escalera de países', () => {
     expect(html).toContain('JUGAR CON CHI')
   })
 
+  it('muestra el formato CT1 con el marcador inicial', () => {
+    const html = renderToString(
+      <LadderScreen
+        progress={EMPTY_PROGRESS}
+        ct1
+        onPlay={() => {}}
+        onBack={() => {}}
+        onReset={() => {}}
+      />,
+    )
+    expect(html).toContain('SET A 25 · INICIO 18-18')
+    expect(html).toContain('ROJAS')
+    expect(html).toContain('VIDAL')
+  })
+
   it('corona la gira al completar las cinco etapas', () => {
     const html = renderToString(
       <LadderScreen

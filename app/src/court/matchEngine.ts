@@ -7,8 +7,10 @@ import {
   MATCH_AP_START,
   MATCH_RALLY_CAP,
   MATCH_TARGET,
+  ROTATION_CELLS,
   SERVE_REACH,
   AI_STANDARD,
+  attackFault,
   attackOptions,
   cloneState,
   defenseCandidates,
@@ -23,11 +25,16 @@ import {
   receptionValue,
   resolveDuel,
   schemeDefender,
+  serveFault,
+  servePressure,
+  serveZoneForTarget,
   setQuality,
   type AttackPlan,
   type AiTuning,
+  type DuelResolution,
   type MatchEvent,
   type MatchState,
+  type ServeZone,
 } from './match'
 import { chooseAttackPlan, chooseDefenseScheme, chooseServeTarget } from './matchAi'
 import { cellDistance, cellsOfSide, otherSide, sameCell } from './geometry'
@@ -47,11 +54,33 @@ const assert: (condition: unknown, message: string) => asserts condition = (
 const manhattan = (a: CourtCell, b: CourtCell): number =>
   Math.abs(a.row - b.row) + Math.abs(a.col - b.col)
 
+const rotationFromPlayers = (state: MatchState, side: Side): string[] => {
+  const roster = playersOf(state, side)
+  const used = new Set<string>()
+  const rotation = ROTATION_CELLS[side].map((target) => {
+    const player = roster.find(
+      (candidate) =>
+        !used.has(candidate.id) && sameCell(candidate.cell, target),
+    )
+    if (player) {
+      used.add(player.id)
+      return player.id
+    }
+    return ''
+  })
+  const remaining = roster.filter((player) => !used.has(player.id))
+  return rotation.map((id) => id || remaining.shift()?.id || '')
+}
+
 export type CreateMatchOptions = {
   roster: CourtPlayer[]
   playerSide?: Side
   server?: Side
   targetScore?: number
+  /** Marcador con el que arranca el set (por ejemplo, 17-19). */
+  startScore?: Partial<Record<Side, number>>
+  /** En CT1 la tensión reemplaza la energía por rally. */
+  useTension?: boolean
   ai?: AiTuning
 }
 
@@ -66,13 +95,19 @@ export const createMatch = (options: CreateMatchOptions): MatchState => {
     playerSide: options.playerSide ?? 'home',
     server: options.server ?? 'home',
     possession: options.server ?? 'home',
-    score: { home: 0, away: 0 },
+    score: {
+      home: options.startScore?.home ?? 0,
+      away: options.startScore?.away ?? 0,
+    },
+    tension: { home: 30, away: 30 },
+    useTension: options.useTension ?? false,
     ap: 0,
     defenseTechniqueUsed: false,
     players,
     formation: Object.fromEntries(
       players.map((player) => [player.id, { ...player.cell }]),
     ),
+    rotation: { home: [], away: [] },
     ball: { ...players[0].cell },
     passQuality: 0,
     setQuality: 0,
@@ -87,6 +122,8 @@ export const createMatch = (options: CreateMatchOptions): MatchState => {
     attackHistory: [],
     defenseHistory: [],
   }
+  state.rotation.home = rotationFromPlayers(state, 'home')
+  state.rotation.away = rotationFromPlayers(state, 'away')
   state.ball = { ...designatedServer(state, state.server).cell }
   return state
 }
@@ -105,10 +142,63 @@ const pushHistory = (
 }
 
 const resetFormation = (state: MatchState): void => {
-  for (const player of state.players) {
-    const target = state.formation[player.id]
-    if (target) player.cell = { ...target }
+  for (const side of ['home', 'away'] as const) {
+    const rotation = state.rotation[side]
+    if (rotation.length === 6) {
+      const cells = ROTATION_CELLS[side]
+      rotation.forEach((id, index) => {
+        const player = playerById(state, id)
+        if (player) player.cell = { ...cells[index] }
+      })
+      continue
+    }
+    for (const player of state.players.filter(
+      (candidate) => candidate.side === side,
+    )) {
+      const target = state.formation[player.id]
+      if (target) player.cell = { ...target }
+    }
   }
+}
+
+/**
+ * Rotación de side-out: el equipo que gana el saque rota en sentido
+ * horario. Si el líbero queda en la red, se intercambia con un jugador
+ * de fondo para que siga cubriendo la zaga.
+ */
+export const rotateSide = (state: MatchState, side: Side): void => {
+  const rotation = state.rotation[side]
+  if (rotation.length !== 6) return
+  const next = [
+    rotation[1],
+    rotation[2],
+    rotation[3],
+    rotation[4],
+    rotation[5],
+    rotation[0],
+  ]
+  const back = new Set([0, 4, 5])
+  const liberoIndex = next.findIndex(
+    (id) => playerById(state, id)?.classId === 'libero',
+  )
+  if (liberoIndex !== -1 && !back.has(liberoIndex)) {
+    let swapIndex = next.findIndex(
+      (id, index) =>
+        back.has(index) && playerById(state, id)?.classId === 'middle',
+    )
+    if (swapIndex === -1) {
+      swapIndex = next.findIndex(
+        (id, index) =>
+          back.has(index) && playerById(state, id)?.classId !== 'libero',
+      )
+    }
+    if (swapIndex !== -1) {
+      const temp = next[liberoIndex]
+      next[liberoIndex] = next[swapIndex]
+      next[swapIndex] = temp
+    }
+  }
+  state.rotation[side] = next
 }
 
 const awardPoint = (
@@ -116,7 +206,14 @@ const awardPoint = (
   side: Side,
   reason: 'ace' | 'error' | 'attack' | 'block' | 'cap',
 ): MatchEvent[] => {
+  const previousServer = state.server
   state.score[side] += 1
+  if (state.useTension) {
+    state.tension[side] = Math.min(100, state.tension[side] + 10)
+    const other = otherSide(side)
+    state.tension[other] = Math.max(0, state.tension[other] - 5)
+  }
+  if (side !== previousServer) rotateSide(state, side)
   state.server = side
   state.possession = side
   state.ap = 0
@@ -132,7 +229,8 @@ const awardPoint = (
   const events: MatchEvent[] = [
     { type: 'POINT', side, reason, score: { ...state.score } },
   ]
-  if (state.score[side] >= state.targetScore) {
+  const lead = state.score[side] - state.score[otherSide(side)]
+  if (state.score[side] >= state.targetScore && lead >= 2) {
     state.phase = 'END'
     state.winner = side
     events.push({
@@ -161,6 +259,11 @@ const startPossession = (
   state.passQuality = passQuality
   state.setQuality = 0
   state.ap = Math.max(0, Math.min(MATCH_AP_MAX, ap + tuning))
+  if (state.useTension) {
+    const gain =
+      passQuality === 3 ? 10 : passQuality === 2 ? 5 : passQuality === 1 ? 2 : 0
+    state.tension[side] = Math.min(100, state.tension[side] + gain)
+  }
   state.attackerId = null
   state.hiddenAttack = null
   state.hiddenScheme = null
@@ -281,6 +384,7 @@ export const serve = (
   rng: Rng = Math.random,
   choice: ReceptionChoice = {},
   pressure = 1,
+  zone?: ServeZone,
 ): EngineResult => {
   assert(state.phase === 'SERVE', 'No es la fase de saque.')
   assert(
@@ -290,6 +394,31 @@ export const serve = (
   const next = cloneState(state)
   const serverPlayer = designatedServer(next, next.server)
   next.ball = { ...serverPlayer.cell }
+
+  // El destino elegido puede fallar: corto a la red, fondo afuera.
+  if (zone) {
+    const fault = serveFault(serverPlayer, zone, rng())
+    if (fault) {
+      const events: MatchEvent[] = [
+        {
+          type: 'SERVE',
+          serverId: serverPlayer.id,
+          target: { ...target },
+          receiverId: null,
+          quality: null,
+          outcome: fault,
+          zone,
+        },
+      ]
+      return {
+        state: next,
+        events: [
+          ...events,
+          ...awardPoint(next, otherSide(next.server), 'error'),
+        ],
+      }
+    }
+  }
 
   const result = receiverForServe(next, target)
   if (!result) {
@@ -301,9 +430,13 @@ export const serve = (
         receiverId: null,
         quality: null,
         outcome: 'ace',
+        zone,
       },
     ]
-    return { state: next, events: [...events, ...awardPoint(next, next.server, 'ace')] }
+    return {
+      state: next,
+      events: [...events, ...awardPoint(next, next.server, 'ace')],
+    }
   }
 
   const requested = choice.receiverId
@@ -323,9 +456,14 @@ export const serve = (
         seam: result.seam,
       })
     : result.value - (requested ? 1 : 0)
-  const quality = receptionQuality(value - (pressure - 1))
+  const effectiveValue = value - (pressure - 1)
+  const quality = receptionQuality(effectiveValue)
   const from = { ...receiver.cell }
   const setter = designatedSetter(next, receivingSide, receiver.id)
+  const dig =
+    pressure >= 2 &&
+    (receiver.classId === 'libero' ||
+      (receiver.stats.velocidad >= 4 && receiver.stats.tecnica < 4))
 
   if (quality === 0) {
     const events: MatchEvent[] = [
@@ -335,13 +473,86 @@ export const serve = (
         target: { ...target },
         receiverId: receiver.id,
         quality,
-        outcome: 'error',
+        outcome: 'ace',
+        zone,
       },
     ]
-    return { state: next, events: [...events, ...awardPoint(next, next.server, 'error')] }
+    return {
+      state: next,
+      events: [...events, ...awardPoint(next, next.server, 'ace')],
+    }
   }
 
   movePlayer(next, receiver.id, target)
+
+  // La exigida se parte según el valor: queda para un compañero o se va
+  // como free ball. Solo aplica al flujo CT1 (con destino elegido).
+  const freeBall =
+    zone !== undefined && quality === 1 && effectiveValue < 3
+  const teammate =
+    zone !== undefined && quality === 1 && effectiveValue >= 3
+
+  if (freeBall) {
+    const opponent = otherSide(receivingSide)
+    const freeReceiver =
+      playersOf(next, opponent).find(
+        (player) => player.classId === 'libero',
+      ) ??
+      playersOf(next, opponent).find(
+        (player) => player.classId !== 'setter',
+      ) ??
+      playersOf(next, opponent)[0]
+    assert(freeReceiver, 'El rival no tiene receptor para la free ball.')
+    const freeSetter = designatedSetter(next, opponent, freeReceiver.id)
+    const freeFrom = { ...freeReceiver.cell }
+    startPossession(
+      next,
+      opponent,
+      freeReceiver.cell,
+      3,
+      MATCH_AP_START + MATCH_AP_REFUND,
+    )
+    const events: MatchEvent[] = [
+      {
+        type: 'SERVE',
+        serverId: serverPlayer.id,
+        target: { ...target },
+        receiverId: receiver.id,
+        quality,
+        outcome: 'ok',
+        zone,
+      },
+      {
+        type: 'RECEIVE',
+        playerId: receiver.id,
+        from,
+        to: { ...freeReceiver.cell },
+        quality,
+        freeBall: true,
+        dig,
+      },
+      {
+        type: 'FREE_BALL',
+        fromSide: receivingSide,
+        toSide: opponent,
+      },
+      {
+        type: 'RECEIVE',
+        playerId: freeReceiver.id,
+        from: freeFrom,
+        to: { ...freeSetter.cell },
+        quality: 3,
+      },
+    ]
+    return {
+      state: next,
+      events: [
+        ...events,
+        ...autoSet(next, opponent, freeReceiver.id, rng),
+      ],
+    }
+  }
+
   startPossession(
     next,
     receivingSide,
@@ -358,6 +569,7 @@ export const serve = (
       receiverId: receiver.id,
       quality,
       outcome: 'ok',
+      zone,
     },
     {
       type: 'RECEIVE',
@@ -365,10 +577,18 @@ export const serve = (
       from,
       to: { ...setter.cell },
       quality,
+      teammate,
+      dig,
     },
   ]
 
-  return { state: next, events: [...events, ...autoSet(next, next.possession, receiver.id, rng)] }
+  return {
+    state: next,
+    events: [
+      ...events,
+      ...autoSet(next, next.possession, receiver.id, rng),
+    ],
+  }
 }
 
 export const aiServe = (
@@ -376,6 +596,18 @@ export const aiServe = (
   rng: Rng = Math.random,
   choice: ReceptionChoice = {},
 ): EngineResult => serve(state, chooseServeTarget(state, rng), rng, choice)
+
+/** Saque de la IA con destino/zona, para el flujo CT1. */
+export const aiServeCt1 = (
+  state: MatchState,
+  rng: Rng = Math.random,
+  choice: ReceptionChoice = {},
+): EngineResult => {
+  const target = chooseServeTarget(state, rng)
+  const server = designatedServer(state, state.server)
+  const zone = serveZoneForTarget(state.server, target)
+  return serve(state, target, rng, choice, servePressure(server), zone)
+}
 
 export type ServeType = 'power' | 'float' | 'short'
 
@@ -447,12 +679,69 @@ export const attack = (
       (technique.kind === 'attack' && technique.classId === attacker.classId),
     'Técnica inválida para ese atacante.',
   )
-  const cost = ATTACK_AP_COST[kind] + (technique?.cost ?? 0)
-  assert(state.ap >= cost, 'No hay energía para ese ataque.')
+  const kindCost = ATTACK_AP_COST[kind]
+  const techniqueCost = technique?.cost ?? 0
+  const cost = kindCost + techniqueCost
+  const tensionCost = kindCost * 15 + techniqueCost * 10
+  assert(
+    state.useTension
+      ? state.tension[state.playerSide] >= tensionCost
+      : state.ap >= cost,
+    'No hay energía para ese ataque.',
+  )
 
   const next = cloneState(state)
   if (next.rallyAttacks >= MATCH_RALLY_CAP) {
     return { state: next, events: awardPoint(next, otherSide(next.playerSide), 'cap') }
+  }
+
+  if (next.useTension) {
+    next.tension[next.playerSide] = Math.max(
+      0,
+      next.tension[next.playerSide] - tensionCost,
+    )
+  } else {
+    next.ap = Math.max(0, next.ap - cost)
+  }
+
+  const fault = attackFault(attacker, kind, next.setQuality, rng())
+  if (fault) {
+    const defending = playersOf(next, otherSide(attacker.side))
+    const defender =
+      schemeDefender(defending, scheme, target, kind === 'quick').player ??
+      defending[0]
+    assert(defender, 'No hay defensor para el fault.')
+    const resolution: DuelResolution = {
+      A: 0,
+      D: 0,
+      edge: 0,
+      zone: 0,
+      outcome: 'fault',
+      fault,
+      digQuality: null,
+      defenderId: defender.id,
+      blockerIds: [],
+      scheme,
+    }
+    next.rallyAttacks += 1
+    next.attackerId = attacker.id
+    next.hiddenScheme = null
+    const events: MatchEvent[] = [
+      {
+        type: 'ATTACK',
+        attackerId: attacker.id,
+        kind,
+        target: { ...target },
+        resolution,
+      },
+    ]
+    return {
+      state: next,
+      events: [
+        ...events,
+        ...awardPoint(next, otherSide(attacker.side), 'error'),
+      ],
+    }
   }
 
   const resolution = resolveDuel({
@@ -464,7 +753,6 @@ export const attack = (
     scheme,
     attackTechnique: technique?.id,
   })
-  next.ap = Math.max(0, next.ap - cost)
   next.rallyAttacks += 1
   next.attackerId = attacker.id
   next.hiddenScheme = null
@@ -573,11 +861,66 @@ export const defend = (
   const attackTechnique = plan.technique
     ? TECHNIQUES[plan.technique]
     : null
-  const cost = ATTACK_AP_COST[plan.kind] + (attackTechnique?.cost ?? 0)
+  const kindCost = ATTACK_AP_COST[plan.kind]
+  const attackTechniqueCost = attackTechnique?.cost ?? 0
+  const cost = kindCost + attackTechniqueCost
+  const defenseTensionCost = (technique?.cost ?? 0) * 10
+  assert(
+    !state.useTension ||
+      state.tension[state.playerSide] >= defenseTensionCost,
+    'No hay tensión para la técnica defensiva.',
+  )
 
   const next = cloneState(state)
   if (next.rallyAttacks >= MATCH_RALLY_CAP) {
     return { state: next, events: awardPoint(next, next.playerSide, 'cap') }
+  }
+
+  // El ataque rival usa su energía por rally; la tensión del jugador paga
+  // solo la técnica defensiva.
+  next.ap = Math.max(0, next.ap - cost)
+  if (next.useTension) {
+    next.tension[next.playerSide] = Math.max(
+      0,
+      next.tension[next.playerSide] - defenseTensionCost,
+    )
+  }
+
+  const fault = attackFault(attacker, plan.kind, next.setQuality, rng())
+  if (fault) {
+    const defending = playersOf(next, next.playerSide)
+    const autoDefender =
+      schemeDefender(defending, scheme, plan.target, plan.kind === 'quick')
+        .player ?? defending[0]
+    assert(autoDefender, 'No hay defensor para el fault.')
+    const resolution: DuelResolution = {
+      A: 0,
+      D: 0,
+      edge: 0,
+      zone: 0,
+      outcome: 'fault',
+      fault,
+      digQuality: null,
+      defenderId: autoDefender.id,
+      blockerIds: [],
+      scheme,
+    }
+    next.rallyAttacks += 1
+    next.attackerId = attacker.id
+    next.hiddenAttack = null
+    const events: MatchEvent[] = [
+      {
+        type: 'ATTACK',
+        attackerId: attacker.id,
+        kind: plan.kind,
+        target: { ...plan.target },
+        resolution,
+      },
+    ]
+    return {
+      state: next,
+      events: [...events, ...awardPoint(next, next.playerSide, 'error')],
+    }
   }
 
   const resolution = resolveDuel({
@@ -591,7 +934,6 @@ export const defend = (
     defenseTechnique: technique?.id,
     attackTechnique: plan.technique,
   })
-  next.ap = Math.max(0, next.ap - cost)
   next.defenseTechniqueUsed =
     next.defenseTechniqueUsed || Boolean(technique)
   next.rallyAttacks += 1

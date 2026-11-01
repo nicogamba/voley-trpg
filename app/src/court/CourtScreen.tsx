@@ -19,6 +19,7 @@ import {
   attackOptions,
   attackTargetFor,
   defenseCandidates,
+  designatedServer,
   playersOf,
   schemeDefender,
   schemeHint,
@@ -228,15 +229,8 @@ export const CourtScreen = ({
       (player) => player.side === 'home' && player.classId === 'setter',
     ) ?? match.players.find((player) => player.side === 'home')
 
-  const server =
-    match.players.find(
-      (player) => player.side === 'home' && player.classId === 'opposite',
-    ) ?? match.players.find((player) => player.side === 'home')
-
-  const awayServer =
-    match.players.find(
-      (player) => player.side === 'away' && player.classId === 'opposite',
-    ) ?? match.players.find((player) => player.side === 'away')
+  const server = designatedServer(match, 'home')
+  const awayServer = designatedServer(match, 'away')
 
   const receiveHint = useMemo(() => {
     const rng = tellRng(match, 1)

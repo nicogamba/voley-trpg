@@ -48,6 +48,8 @@ const classPriority = (player: Player): number => {
       return 2
     case 'opposite':
       return 3
+    case 'wing':
+      return 4
   }
 }
 

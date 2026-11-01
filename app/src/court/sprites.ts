@@ -12,6 +12,14 @@ const portraitFiles = import.meta.glob('../assets/sprites/portraits/*.png', {
   import: 'default',
 }) as Record<string, string>
 
+const teamPortraitFiles = import.meta.glob(
+  '../assets/sprites/portraits/teams/*.png',
+  {
+    eager: true,
+    import: 'default',
+  },
+) as Record<string, string>
+
 const ballFiles = import.meta.glob('../assets/sprites/ball.png', {
   eager: true,
   import: 'default',
@@ -27,17 +35,27 @@ const byKey = (files: Record<string, string>): Record<string, string> =>
 
 export const PLAYER_SHEETS = byKey(playerFiles)
 export const PORTRAITS = byKey(portraitFiles)
+export const TEAM_PORTRAITS = byKey(teamPortraitFiles)
 export const BALL_SHEET = Object.values(ballFiles)[0]
 
 export const sheetFor = (
   team: string,
   classId: ClassId,
-): string | undefined => PLAYER_SHEETS[`${team}-${classId}`]
+): string | undefined =>
+  PLAYER_SHEETS[`${team}-${classId}`] ??
+  // Los puntas todavía no tienen hoja propia: usan el cuerpo del opuesto.
+  (classId === 'wing' ? PLAYER_SHEETS[`${team}-opposite`] : undefined)
 
 export const portraitFor = (
   side: Side,
   classId: ClassId,
 ): string | undefined => PORTRAITS[`${side}-${classId}`]
+
+/** Retrato propio del equipo y rol; cae al genérico si falta. */
+export const teamPortraitFor = (
+  teamId: string,
+  role: string,
+): string | undefined => TEAM_PORTRAITS[`${teamId}-${role}`]
 
 const cache = new Map<string, HTMLImageElement | null>()
 
