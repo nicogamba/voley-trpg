@@ -5,10 +5,17 @@ type Props = {
   speed?: number
   /** Muestra el texto completo de una vez (primer toque). */
   skip?: boolean
+  /** Avisa cuando el texto terminó de escribirse solo. */
+  onDone?: () => void
 }
 
 /** Relato con efecto de máquina de escribir; el contenedor lo remonta por key. */
-export const Typewriter = ({ text, speed = 12, skip = false }: Props) => {
+export const Typewriter = ({
+  text,
+  speed = 12,
+  skip = false,
+  onDone,
+}: Props) => {
   const [count, setCount] = useState(0)
 
   useEffect(() => {
@@ -24,6 +31,10 @@ export const Typewriter = ({ text, speed = 12, skip = false }: Props) => {
     }, speed)
     return () => window.clearInterval(timer)
   }, [text, speed, skip])
+
+  useEffect(() => {
+    if (skip || count >= text.length) onDone?.()
+  }, [count, skip, text.length, onDone])
 
   if (skip) return <>{text}</>
   return <>{text.slice(0, count)}</>

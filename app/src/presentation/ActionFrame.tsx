@@ -90,6 +90,7 @@ export const ActionFrame = ({ frame, players, teams, muted }: Props) => {
         className="ct1-frame is-shot"
         data-mode={frame.mode}
         data-effect={frame.effect ?? 'none'}
+        data-shot={frame.shot}
         style={style}
       >
         <img className="ct1-frame-image" src={shotImage} alt="" />

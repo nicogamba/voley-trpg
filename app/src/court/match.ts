@@ -13,9 +13,15 @@ import type {
   DefenseScheme,
   Quality,
 } from '../engine'
-import { cell, cellDistance, cellsOfSide, otherSide } from './geometry'
+import {
+  cell,
+  cellDistance,
+  cellsOfSide,
+  mirrorCol,
+  otherSide,
+} from './geometry'
 import { TECHNIQUES, type TechniqueId } from './techniques'
-import type { CourtCell, CourtPlayer, Side } from './types'
+import type { CourtCell, CourtCol, CourtPlayer, Side } from './types'
 
 /** Reglas del partido v2 sobre la grilla de 4 columnas x 3 filas. */
 export const MATCH_TARGET = 7
@@ -203,6 +209,10 @@ export type MatchState = {
   ball: CourtCell
   passQuality: Quality
   setQuality: Quality
+  /** Atacante que eligió el armador en CT1. */
+  setAttackerId: string | null
+  /** Lado del ataque elegido por el armador: 2 (derecha) o 4 (izquierda). */
+  setZone: 2 | 4 | null
   attackerId: string | null
   /** Esquema que eligió la IA mientras el jugador ataca. */
   hiddenScheme: DefenseScheme | null
@@ -464,6 +474,12 @@ export const attackFault = (
   return kind === 'quick' || kind === 'pipe' || setQualityValue <= 1
     ? 'net'
     : 'out'
+}
+
+/** Zona de ataque (2 derecha, 4 izquierda) según la celda del atacante. */
+export const attackZoneForCell = (side: Side, col: CourtCol): 2 | 4 => {
+  const ownCol = side === 'away' ? mirrorCol(col) : col
+  return ownCol >= 2 ? 2 : 4
 }
 
 export const attackZoneBonus = (
@@ -732,7 +748,19 @@ export const pickAttackerFor = (
   state: MatchState,
   kind: AttackKind,
   target: CourtCell,
-): CourtPlayer | undefined => attackCandidates(state, kind, target)[0]
+): CourtPlayer | undefined => {
+  const preferred =
+    state.useTension && state.setAttackerId
+      ? playerById(state, state.setAttackerId)
+      : undefined
+  if (
+    preferred &&
+    isAttackAllowed({ attacker: preferred, kind, target }).ok
+  ) {
+    return preferred
+  }
+  return attackCandidates(state, kind, target)[0]
+}
 
 /** El destino lo elige la jugada, no el dedo del jugador. */
 export const attackTargetFor = (
@@ -799,6 +827,13 @@ export const attackOptions = (state: MatchState): AttackOption[] => {
     let best: { attacker: CourtPlayer; targets: CourtCell[]; score: number } | null =
       null
     for (const attacker of playersOf(state, side)) {
+      if (
+        state.useTension &&
+        state.setAttackerId &&
+        attacker.id !== state.setAttackerId
+      ) {
+        continue
+      }
       if (!attackKindsFor(attacker).includes(kind)) continue
       const targets = cellsOfSide(otherSide(side)).filter(
         (target) => isAttackAllowed({ attacker, kind, target }).ok,

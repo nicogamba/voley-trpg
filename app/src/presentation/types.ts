@@ -21,7 +21,10 @@ export type SceneEffect = 'speed' | 'impact' | 'dust' | 'flash'
 /** Planos de impacto compartidos entre equipos. */
 export type ShotId =
   | 'serve'
+  | 'readyToServe'
   | 'duel'
+  | 'attack2'
+  | 'attack4'
   | 'block'
   | 'receive'
   | 'receiveAlt'

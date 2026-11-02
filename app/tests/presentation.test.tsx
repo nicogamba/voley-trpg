@@ -68,6 +68,7 @@ describe('presentación CT1', () => {
     expect(html).toContain('NANDO')
     expect(html).toContain('COMPLETAR')
     expect(html).toContain('ct1-frame-image')
+    expect(html).toContain('data-shot="readyToServe"')
     expect(html).toContain('data-text')
   })
 
@@ -115,6 +116,21 @@ describe('presentación CT1', () => {
     expect(html).toContain('ct1-log')
     expect(html).toContain('El rival sacó.')
     expect(html).toContain('COMPLETAR')
+  })
+
+  it('renderiza los planos de ataque por 2 y por 4', () => {
+    for (const shot of ['attack2', 'attack4'] as const) {
+      const html = renderToString(
+        <ActionFrame
+          frame={{ mode: 'closeup', shot, banner: 'TU ATAQUE' }}
+          players={DEMO_PLAYERS}
+          teams={DEMO_TEAMS}
+          muted
+        />,
+      )
+      expect(html).toContain(`data-shot="${shot}"`)
+      expect(html).toContain('ct1-frame-image')
+    }
   })
 
   it('renderiza el cuadro de acción con banner, sello y sprite', () => {

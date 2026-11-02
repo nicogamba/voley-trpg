@@ -28,13 +28,7 @@ export const CommentBox = ({
   log,
   muted,
 }: Props) => {
-  const [armed, setArmed] = useState(false)
   const [revealed, setRevealed] = useState(false)
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setArmed(true), 220)
-    return () => window.clearTimeout(timer)
-  }, [line.text])
 
   useEffect(() => {
     if (!muted) playCue('blip')
@@ -71,6 +65,7 @@ export const CommentBox = ({
             text={line.text}
             speed={14}
             skip={revealed}
+            onDone={() => setRevealed(true)}
           />
         </span>
       </p>
@@ -106,7 +101,6 @@ export const CommentBox = ({
           }
           onNext()
         }}
-        disabled={!armed}
       >
         {revealed ? nextLabel : 'COMPLETAR ▶'}
       </button>

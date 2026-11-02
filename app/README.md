@@ -15,7 +15,7 @@ leer la jugada rival y comprometerse antes de ver el resultado.
 - **S1 “Shell CT1” (demo)**: pantalla partida, comando → cuadro de acción →
   relato → resultado. Set a 25 desde 17-19, motor **6v6** con rotación
   side-out y líbero en zaga.
-- 139 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
+- 142 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
 - Balance simulado con 500 partidos IA vs IA (ver más abajo).
 - Pendiente: playtest con 5 personas y deploy en Vercel.
 
@@ -36,10 +36,14 @@ o agregando `?ct1=1` a la URL.
 - **Recepción:** perfecta, buena, exigida, dig, cayó en un compañero, free ball,
   red o afuera.
 - **Free ball:** el rival recibe con calidad 3 y arma cómodo para atacar.
+- **Armado CT1:** el armador elige al atacante y el lado (por 2 o por 4). El
+  menú de ataque muestra solo los golpes de ese atacante; la pelota viaja a su
+  celda y la imagen previa refleja el lado elegido.
 - **Tensión 0-100:** reemplaza la energía AP en CT1. Paga potencia, wipe y
   pipe; sube con buenas recepciones y puntos.
 - **Stats debajo del retrato:** TEC, POT, VEL y LEC en la tarjeta del jugador.
-- El primer toque completa el texto del relator; el segundo avanza.
+- El texto del relator se escribe solo. Si ya terminó, un toque avanza; si
+  todavía está escribiendo, el primer toque lo completa y el segundo avanza.
 - Los cuadros y el relator ya usan el arte generado; las técnicas especiales
   siguen pendientes.
 
@@ -76,11 +80,11 @@ Los **planos compartidos** (sin equipo) se preparan con:
 python3 tools/prepare-shots.py
 ```
 
-Toma los planos de `art-source/principal/` (saque, duelo, bloqueo,
-recepción, armado, dig, punto, error, free ball, festejo y derrota), los
-recorta a 1.125:1 y los deja en `app/src/assets/action/shared/`. La pantalla
-CT1 usa esos planos en las decisiones y en la acción. La cancha ya no aparece
-en el modo CT1.
+Toma los planos de `art-source/principal/` (saque, listo para sacar, duelo,
+bloqueo, recepción, armado, dig, punto, error, free ball, festejo, derrota y
+ataque por 2 / por 4), los recorta a 1.125:1 y los deja en
+`app/src/assets/action/shared/`. La pantalla CT1 usa esos planos en las
+decisiones y en la acción. La cancha ya no aparece en el modo CT1.
 
 Los retratos propios de cada equipo salen de las sheets:
 
@@ -160,7 +164,7 @@ npm run dev
 El servidor queda en `http://127.0.0.1:5173/` (o el siguiente puerto libre).
 
 ```bash
-npm test        # 139 tests: motor, comandos, store, simulación, escenas y render
+npm test        # 142 tests: motor, comandos, store, simulación, escenas y render
 npm run build   # tsc -b && vite build
 npm run lint    # oxlint
 npm run preview # sirve dist/

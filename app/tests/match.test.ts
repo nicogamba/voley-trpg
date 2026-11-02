@@ -8,8 +8,10 @@ import {
   attackFaultChance,
   attackOptions,
   attackTargetFor,
+  attackZoneForCell,
   defenseCandidates,
   isAttackAllowed,
+  pickAttackerFor,
   serveFault,
   serveFaultChance,
   serveTargetForZone,
@@ -458,6 +460,52 @@ describe('motor de partido v2', () => {
     })
     const result = serve(state, cell('home', 2, 1), mulberry32(1))
     expect(result.state.tension.home).toBeGreaterThan(30)
+  })
+
+  it('el armado CT1 fija atacante, zona y pelota', () => {
+    const state = createMatch({
+      roster: DEMO_PLAYERS,
+      playerSide: 'home',
+      server: 'away',
+      targetScore: MATCH_TARGET,
+      useTension: true,
+    })
+    const result = serve(state, cell('home', 2, 1), mulberry32(1))
+    const next = result.state
+    const attacker = next.players.find(
+      (player) => player.id === next.setAttackerId,
+    )
+    expect(attacker).toBeTruthy()
+    expect(attacker?.side).toBe('home')
+    expect(attacker?.classId).not.toBe('libero')
+    expect(attacker?.classId).not.toBe('setter')
+    expect(next.setZone).toBe(
+      attackZoneForCell(attacker!.side, attacker!.cell.col),
+    )
+    expect(next.ball).toEqual(attacker!.cell)
+
+    const setEvent = result.events.find((event) => event.type === 'SET')
+    expect(setEvent?.type).toBe('SET')
+    if (setEvent?.type === 'SET') {
+      expect(setEvent.to).toEqual(attacker!.cell)
+    }
+
+    const options = attackOptions(next)
+    expect(options.length).toBeGreaterThan(0)
+    expect(
+      options.every((option) => option.attacker.id === attacker!.id),
+    ).toBe(true)
+    const first = options[0]
+    expect(
+      pickAttackerFor(next, first.kind, first.targets[0])?.id,
+    ).toBe(attacker!.id)
+  })
+
+  it('mapea la zona de ataque según el lado', () => {
+    expect(attackZoneForCell('home', 3)).toBe(2)
+    expect(attackZoneForCell('home', 0)).toBe(4)
+    expect(attackZoneForCell('away', 0)).toBe(2)
+    expect(attackZoneForCell('away', 3)).toBe(4)
   })
 
   it('calcula el riesgo de fault de ataque', () => {

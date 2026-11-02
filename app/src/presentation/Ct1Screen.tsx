@@ -285,13 +285,32 @@ export const Ct1Screen = ({
     shot: won ? 'celebrate' : 'defeat',
   }
 
+  const attackZone = match.setZone ?? 4
+  const attackShot: ActionFrameSpec['shot'] =
+    attackZone === 2 ? 'attack2' : 'attack4'
+
   const decisionFrame: ActionFrameSpec =
     decision === 'wait'
-      ? { mode: 'closeup', shot: 'serve', banner: 'SAQUE RIVAL', tone: 'away' }
+      ? {
+          mode: 'closeup',
+          shot: 'readyToServe',
+          banner: 'SAQUE RIVAL',
+          tone: 'away',
+        }
       : decision === 'serve'
-        ? { mode: 'closeup', shot: 'serve', banner: 'TU SAQUE', tone: 'home' }
+        ? {
+            mode: 'closeup',
+            shot: 'readyToServe',
+            banner: 'TU SAQUE',
+            tone: 'home',
+          }
         : decision === 'attack'
-          ? { mode: 'duel', shot: 'duel', banner: 'TU ATAQUE', tone: 'home' }
+          ? {
+              mode: 'closeup',
+              shot: attackShot,
+              banner: `TU ATAQUE · POR ${attackZone}`,
+              tone: 'home',
+            }
           : decision === 'defend'
             ? {
                 mode: 'closeup',
@@ -303,7 +322,7 @@ export const Ct1Screen = ({
 
   const introFrame: ActionFrameSpec = {
     mode: 'closeup',
-    shot: 'serve',
+    shot: 'readyToServe',
     banner: 'SAQUE LOCAL',
     tone: 'home',
   }

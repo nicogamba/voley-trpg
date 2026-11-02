@@ -11,7 +11,10 @@ import {
   SERVE_REACH,
   AI_STANDARD,
   attackFault,
+  attackKindsFor,
   attackOptions,
+  attackValue,
+  attackZoneForCell,
   cloneState,
   defenseCandidates,
   designatedServer,
@@ -111,6 +114,8 @@ export const createMatch = (options: CreateMatchOptions): MatchState => {
     ball: { ...players[0].cell },
     passQuality: 0,
     setQuality: 0,
+    setAttackerId: null,
+    setZone: null,
     attackerId: null,
     hiddenScheme: null,
     hiddenAttack: null,
@@ -220,6 +225,8 @@ const awardPoint = (
   state.defenseTechniqueUsed = false
   state.passQuality = 0
   state.setQuality = 0
+  state.setAttackerId = null
+  state.setZone = null
   state.attackerId = null
   state.hiddenAttack = null
   state.hiddenScheme = null
@@ -265,6 +272,8 @@ const startPossession = (
     state.tension[side] = Math.min(100, state.tension[side] + gain)
   }
   state.attackerId = null
+  state.setAttackerId = null
+  state.setZone = null
   state.hiddenAttack = null
   state.hiddenScheme = null
 }
@@ -306,7 +315,47 @@ const receiverForServe = (
 }
 
 /**
- * Autoarmado: el balón viaja al armador y el ataque queda listo.
+ * Elige a quién arma el setter en CT1. Puntúa el mejor ataque disponible
+ * de cada atacante y elige entre los mejores para que el armado varíe.
+ */
+const chooseSetTarget = (
+  state: MatchState,
+  side: Side,
+  rng: Rng,
+): CourtPlayer | null => {
+  const targets = cellsOfSide(otherSide(side))
+  const scored = playersOf(state, side)
+    .filter(
+      (player) =>
+        player.classId !== 'setter' && player.classId !== 'libero',
+    )
+    .map((player) => {
+      let value = Number.NEGATIVE_INFINITY
+      for (const kind of attackKindsFor(player)) {
+        for (const target of targets) {
+          if (!isAttackAllowed({ attacker: player, kind, target }).ok) {
+            continue
+          }
+          value = Math.max(
+            value,
+            attackValue(player, kind, state.setQuality, target),
+          )
+        }
+      }
+      return { player, value }
+    })
+    .filter((entry) => Number.isFinite(entry.value))
+    .sort((a, b) => b.value - a.value)
+
+  if (scored.length === 0) return null
+  const best = scored[0].value
+  const pool = scored.filter((entry) => best - entry.value <= 2.2)
+  return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]
+    .player
+}
+
+/**
+ * Autoarmado: el balón viaja al atacante elegido y el ataque queda listo.
  * Devuelve los eventos intermedios y deja `state.phase` en ATTACK o DEFEND.
  */
 const autoSet = (
@@ -320,6 +369,8 @@ const autoSet = (
   const quality = setQuality(state.passQuality, setter, distance)
 
   if (quality === 0) {
+    state.setAttackerId = null
+    state.setZone = null
     const events: MatchEvent[] = [
       {
         type: 'SET',
@@ -332,31 +383,40 @@ const autoSet = (
     return [...events, ...awardPoint(state, otherSide(side), 'error')]
   }
 
-  state.ball = { ...setter.cell }
   state.setQuality = quality
-  state.attackerId = null
   state.phase = side === state.playerSide ? 'ATTACK' : 'DEFEND'
 
-  const events: MatchEvent[] = [
-    {
-      type: 'SET',
-      setterId: setter.id,
-      quality,
-      to: { ...setter.cell },
-      outcome: 'ok',
-    },
-  ]
-
+  let setTarget: CourtPlayer | null = null
   if (state.phase === 'DEFEND') {
     const plan = chooseAttackPlan(state, rng)
     state.hiddenScheme = null
     state.hiddenAttack = plan
     state.attackerId = plan?.attackerId ?? null
+    if (state.useTension && plan) {
+      setTarget = playerById(state, plan.attackerId) ?? null
+    }
   } else {
+    state.attackerId = null
     state.hiddenAttack = null
     state.hiddenScheme = chooseDefenseScheme(state, rng)
+    if (state.useTension) setTarget = chooseSetTarget(state, side, rng)
   }
-  return events
+
+  state.setAttackerId = setTarget?.id ?? null
+  state.setZone = setTarget
+    ? attackZoneForCell(setTarget.side, setTarget.cell.col)
+    : null
+  state.ball = setTarget ? { ...setTarget.cell } : { ...setter.cell }
+
+  return [
+    {
+      type: 'SET',
+      setterId: setter.id,
+      quality,
+      to: { ...state.ball },
+      outcome: 'ok',
+    },
+  ]
 }
 
 export type ReceptionChoice = {
@@ -394,6 +454,8 @@ export const serve = (
   const next = cloneState(state)
   const serverPlayer = designatedServer(next, next.server)
   next.ball = { ...serverPlayer.cell }
+  next.setAttackerId = null
+  next.setZone = null
 
   // El destino elegido puede fallar: corto a la red, fondo afuera.
   if (zone) {

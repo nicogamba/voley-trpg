@@ -9,11 +9,17 @@ Entrada:
   art-source/principal/game-serve.jpeg
   art-source/principal/duel-at-the-net.jpeg
   art-source/principal/block-hands.jpeg
+  art-source/principal/ready-to-serve.png
+  art-source/principal/tu-ataque-por2.png
+  art-source/principal/tu-ataque-por4.png
 
 Salida:
   app/src/assets/action/shared/serve.png
   app/src/assets/action/shared/duel.png
   app/src/assets/action/shared/block.png
+  app/src/assets/action/shared/ready-to-serve.png
+  app/src/assets/action/shared/attack-2.png
+  app/src/assets/action/shared/attack-4.png
 """
 
 from __future__ import annotations
@@ -45,6 +51,9 @@ SHOTS = {
     "free-ball": ("free-ball.png", 0.5),
     "celebrate": ("celebrate.png", 0.4),
     "defeat": ("defeat.png", 0.5),
+    "ready-to-serve": ("ready-to-serve.png", 0.45),
+    "attack-2": ("tu-ataque-por2.png", 0.95),
+    "attack-4": ("tu-ataque-por4.png", 0.37),
 }
 
 
