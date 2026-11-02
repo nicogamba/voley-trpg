@@ -19,6 +19,7 @@ import {
   cellsOfSide,
   mirrorCol,
   otherSide,
+  sameCell,
 } from './geometry'
 import { TECHNIQUES, type TechniqueId } from './techniques'
 import type { CourtCell, CourtCol, CourtPlayer, Side } from './types'
@@ -409,6 +410,64 @@ export const receptionQuality = (value: number): Quality => {
   if (value >= 4) return 2
   if (value >= 2) return 1
   return 0
+}
+
+/** Chance de salvar una recepción que iba a ser ace, según lectura/velocidad. */
+export const receptionSaveChance = (receiver: CourtPlayer): number =>
+  Math.min(
+    0.35,
+    Math.max(0.08, 0.08 + 0.04 * (receiver.stats.lectura + receiver.stats.velocidad - 6)),
+  )
+
+export type ServeReceiver = {
+  receiver: CourtPlayer
+  value: number
+  seam: boolean
+}
+
+/** Una costura es una celda sin ocupante a la que llegan dos o más jugadores. */
+export const serveSeam = (
+  roster: CourtPlayer[],
+  target: CourtCell,
+): boolean => {
+  if (roster.some((player) => sameCell(player.cell, target))) return false
+  return (
+    roster.filter(
+      (player) => cellDistance(player.cell, target) <= 1,
+    ).length >= 2
+  )
+}
+
+/**
+ * Elige al mejor receptor dentro del alcance del saque. No se limita al
+ * ocupante exacto: el líbero o un compañero cercano pueden cubrir.
+ */
+export const receiverForServe = (
+  state: MatchState,
+  side: Side,
+  target: CourtCell,
+  pressure = 1,
+): ServeReceiver | null => {
+  const roster = playersOf(state, side)
+  const seam = serveSeam(roster, target)
+  const candidates = roster
+    .filter((player) => cellDistance(player.cell, target) <= SERVE_REACH)
+    .map((player) => ({
+      receiver: player,
+      value: receptionValue({
+        player,
+        ballCell: target,
+        pressure,
+        seam,
+      }),
+    }))
+    .sort(
+      (a, b) =>
+        b.value - a.value || a.receiver.id.localeCompare(b.receiver.id),
+    )
+  return candidates.length > 0
+    ? { ...candidates[0], seam }
+    : null
 }
 
 export const setQuality = (

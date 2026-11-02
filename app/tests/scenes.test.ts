@@ -47,11 +47,12 @@ describe('guion de escenas CT1', () => {
     expect(scenes[0].frame.shot).toBe('serve')
     expect(scenes[0].line.text).not.toContain('ACE')
     expect(scenes[1].frame.stamp).toBe('¡ACE!')
+    expect(scenes[1].frame.shot).toBe('point')
     expect(scenes[1].score).toEqual({ home: 25, away: 24 })
     expect(scenes[1].line.text).toContain('ACE')
   })
 
-  it('muestra el duelo, el dig y el armado como tres cuadros', () => {
+  it('muestra el ataque, el dig y el armado como tres cuadros', () => {
     const pre = create()
     const events: MatchEvent[] = [
       {
@@ -90,12 +91,12 @@ describe('guion de escenas CT1', () => {
       meta: { defenseScheme: 'wall' },
     })
     expect(scenes.map((scene) => scene.frame.mode)).toEqual([
-      'duel',
+      'closeup',
       'closeup',
       'closeup',
     ])
     expect(scenes[0].frame.banner).toBe('MURO vs POTENCIA')
-    expect(scenes[0].frame.shot).toBe('duel')
+    expect(scenes[0].frame.shot).toBe('justInAttack')
     expect(scenes[1].frame.banner).toBe('¡DIG!')
     expect(scenes[1].frame.shot).toBe('dig')
     expect(scenes[1].line.text).toContain('SOSA')
@@ -131,10 +132,15 @@ describe('guion de escenas CT1', () => {
       },
     ]
     const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
-    expect(scenes[1].frame.stamp).toBe('¡BLOQUEO!')
-    expect(scenes[1].frame.actorId).toBe('away-middle')
-    expect(scenes[1].frame.shot).toBe('block')
-    expect(scenes[1].score).toEqual({ home: 0, away: 1 })
+    expect(scenes).toHaveLength(3)
+    expect(scenes[0].frame.shot).toBe('justInAttack')
+    expect(scenes[1].frame.banner).toBe('¡BLOQUEO!')
+    expect(scenes[1].frame.shot).toBe('duel')
+    expect(scenes[1].line.text.length).toBeGreaterThan(0)
+    expect(scenes[2].frame.stamp).toBe('¡BLOQUEO!')
+    expect(scenes[2].frame.actorId).toBe('away-middle')
+    expect(scenes[2].frame.shot).toBe('block')
+    expect(scenes[2].score).toEqual({ home: 0, away: 1 })
   })
 
   it('usa el plano de punto y el de cierre según el ganador', () => {
@@ -221,12 +227,14 @@ describe('guion de escenas CT1', () => {
     const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
     expect(scenes[0].frame.banner).toBe('SAQUE ZONA 1')
     expect(scenes[0].line.text).toContain('zona 1')
-    expect(scenes[1].frame.shot).toBe('receiveAlt')
-    expect(scenes[2].frame.shot).toBe('freeBall')
-    expect(scenes[2].frame.banner).toBe('¡FREE BALL!')
-    expect(scenes[3].frame.shot).toBe('receive')
-    expect(scenes[3].line.text).toContain('Pase perfecto')
-    expect(scenes[4].frame.shot).toBe('set')
+    expect(scenes[1].frame.shot).toBe('ballInAir')
+    expect(scenes[1].frame.banner).toBe('EN EL AIRE')
+    expect(scenes[2].frame.shot).toBe('receiveAlt')
+    expect(scenes[3].frame.shot).toBe('freeBall')
+    expect(scenes[3].frame.banner).toBe('¡FREE BALL!')
+    expect(scenes[4].frame.shot).toBe('receive')
+    expect(scenes[4].line.text).toContain('Pase perfecto')
+    expect(scenes[5].frame.shot).toBe('set')
   })
 
   it('usa los planos de dig y compañero en la recepción', () => {
@@ -289,7 +297,7 @@ describe('guion de escenas CT1', () => {
       },
     ]
     const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
-    expect(scenes[0].frame.shot).toBe('duel')
+    expect(scenes[0].frame.shot).toBe('justInAttack')
     expect(scenes[1].frame.shot).toBe('error')
     expect(scenes[1].frame.stamp).toBe('¡ERROR!')
   })
@@ -319,6 +327,62 @@ describe('guion de escenas CT1', () => {
     expect(scenes[1].frame.shot).toBe('errorNet')
     expect(scenes[1].frame.stamp).toBe('¡ERROR!')
     expect(scenes[1].score).toEqual({ home: 0, away: 1 })
+  })
+
+  it('muestra el armado errado con setter-miss y el error afuera', () => {
+    const pre = create()
+    const events: MatchEvent[] = [
+      {
+        type: 'SET',
+        setterId: 'home-setter',
+        quality: 0,
+        to: cell('home', 0, 1),
+        outcome: 'error',
+      },
+      {
+        type: 'POINT',
+        side: 'away',
+        reason: 'error',
+        score: { home: 0, away: 1 },
+      },
+    ]
+    const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
+    expect(scenes[0].frame.banner).toBe('¡ARMADO ERRADO!')
+    expect(scenes[0].frame.shot).toBe('setterMiss')
+    expect(scenes[1].frame.shot).toBe('error')
+    expect(scenes[1].frame.stamp).toBe('¡ERROR!')
+  })
+
+  it('espeja el saque según el lado que saca', () => {
+    const pre = create()
+    const homeServe: MatchEvent[] = [
+      {
+        type: 'SERVE',
+        serverId: 'home-opposite',
+        target: cell('away', 2, 0),
+        receiverId: 'away-opposite',
+        quality: 2,
+        outcome: 'ok',
+        zone: 1,
+      },
+    ]
+    const awayServe: MatchEvent[] = [
+      {
+        type: 'SERVE',
+        serverId: 'away-opposite',
+        target: cell('home', 2, 3),
+        receiverId: 'home-opposite',
+        quality: 2,
+        outcome: 'ok',
+        zone: 1,
+      },
+    ]
+    expect(
+      sceneScript(pre, homeServe, pre, DEMO_TEAMS)[0].frame.mirror,
+    ).toBe(true)
+    expect(
+      sceneScript(pre, awayServe, pre, DEMO_TEAMS)[0].frame.mirror,
+    ).toBe(false)
   })
 
   it('produce escenas con id y relato para un evento real del motor', () => {

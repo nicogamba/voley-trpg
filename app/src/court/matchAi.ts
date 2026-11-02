@@ -2,23 +2,18 @@ import { ATTACK_AP_COST, SCHEME_EDGE } from '../engine'
 import type { AttackKind, DefenseScheme, Quality } from '../engine'
 import {
   MATCH_RALLY_CAP,
-  SERVE_REACH,
   attackValue,
   designatedServer,
   isAttackAllowed,
   playersOf,
+  receiverForServe,
   receptionQuality,
-  receptionValue,
   resolveDuel,
+  servePressure,
   type AttackPlan,
   type MatchState,
 } from './match'
-import {
-  cellDistance,
-  cellsOfSide,
-  otherSide,
-  sameCell,
-} from './geometry'
+import { cellsOfSide, otherSide } from './geometry'
 import type { CourtCell, CourtPlayer, Side } from './types'
 import { techniquesFor } from './techniques'
 
@@ -52,45 +47,15 @@ const pickWeighted = <T>(
   return items[items.length - 1].item
 }
 
-const serveSeam = (
-  roster: CourtPlayer[],
-  target: CourtCell,
-): boolean => {
-  if (roster.some((player) => sameCell(player.cell, target))) return false
-  return roster.filter((player) => cellDistance(player.cell, target) <= 1).length >= 2
-}
-
-const receiverForServe = (
-  state: MatchState,
-  side: Side,
-  target: CourtCell,
-): { receiver: CourtPlayer; value: number; seam: boolean } | null => {
-  const roster = playersOf(state, side)
-  const seam = serveSeam(roster, target)
-  const candidates = roster
-    .filter((player) => cellDistance(player.cell, target) <= SERVE_REACH)
-    .map((player) => ({
-      receiver: player,
-      value: receptionValue({
-        player,
-        ballCell: target,
-        pressure: 1,
-        seam,
-      }),
-    }))
-    .sort((a, b) => b.value - a.value || a.receiver.id.localeCompare(b.receiver.id))
-  if (candidates.length === 0) return null
-  return { ...candidates[0], seam }
-}
-
 /** La IA busca la recepción más incómoda, con algo de ruido. */
 export const chooseServeTarget = (
   state: MatchState,
   rng: Rng = Math.random,
 ): CourtCell => {
   const side = otherSide(state.server)
+  const pressure = servePressure(designatedServer(state, state.server))
   const scored = cellsOfSide(side).map((target) => {
-    const result = receiverForServe(state, side, target)
+    const result = receiverForServe(state, side, target, pressure)
     const value = result ? result.value : -2
     const quality = receptionQuality(value)
     const seam = result?.seam ? 1.4 : 0

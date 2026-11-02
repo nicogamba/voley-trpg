@@ -232,6 +232,10 @@
   image-rendering: pixelated;
 }
 
+.ct1-frame-image.is-mirrored {
+  transform: scaleX(-1);
+}
+
 .ct1-frame.is-shot {
   background: #05070d;
 }

@@ -6,6 +6,8 @@ import type { CourtPlayer, CourtTeam, Side } from '../court/types'
 import {
   attackLabel,
   attackLine,
+  ballInAirLine,
+  blockLine,
   digLine,
   endLine,
   freeBallLine,
@@ -94,6 +96,7 @@ export const sceneScript = (
             effect: 'speed',
             tone: side,
             shot: 'serve',
+            mirror: side === 'home',
           },
           line: serveLine(
             server?.name ?? 'El sacador',
@@ -102,6 +105,20 @@ export const sceneScript = (
             zoneLabel,
           ),
         })
+        if (event.outcome === 'ok') {
+          const receiver = playerById(pre, event.receiverId)
+          push({
+            id: `ball-in-air-${index}`,
+            frame: {
+              mode: 'closeup',
+              banner: 'EN EL AIRE',
+              effect: 'speed',
+              tone: 'neutral',
+              shot: 'ballInAir',
+            },
+            line: ballInAirLine(receiver?.name ?? 'El rival', seed),
+          })
+        }
         lastServerId = event.serverId
         if (event.outcome === 'net') lastErrorShot = 'errorNet'
         else if (event.outcome === 'out') lastErrorShot = 'error'
@@ -168,7 +185,7 @@ export const sceneScript = (
             pose: 'set',
             effect: event.outcome === 'error' ? 'flash' : undefined,
             tone: side,
-            shot: 'set',
+            shot: event.outcome === 'error' ? 'setterMiss' : 'set',
           },
           line: setLine(
             setter?.name ?? 'El armador',
@@ -177,7 +194,7 @@ export const sceneScript = (
             seed,
           ),
         })
-        if (event.outcome === 'error') lastErrorShot = 'errorNet'
+        if (event.outcome === 'error') lastErrorShot = 'error'
         break
       }
 
@@ -192,14 +209,13 @@ export const sceneScript = (
         push({
           id: `attack-${index}`,
           frame: {
-            mode: 'duel',
+            mode: 'closeup',
             actorId: event.attackerId,
-            rivalId: event.resolution.defenderId,
             banner,
             pose: 'spike',
-            effect: 'impact',
+            effect: 'speed',
             tone: side,
-            shot: 'duel',
+            shot: 'justInAttack',
           },
           line: attackLine(
             attacker?.name ?? defender?.name ?? 'El atacante',
@@ -207,6 +223,25 @@ export const sceneScript = (
             seed,
           ),
         })
+        if (event.resolution.outcome === 'blocked') {
+          const blockerId =
+            event.resolution.blockerIds[0] ??
+            event.resolution.defenderId
+          const blocker = playerById(pre, blockerId)
+          push({
+            id: `block-${index}`,
+            frame: {
+              mode: 'duel',
+              actorId: blockerId,
+              banner: '¡BLOQUEO!',
+              pose: 'block',
+              effect: 'impact',
+              tone: otherSide(side),
+              shot: 'duel',
+            },
+            line: blockLine(blocker?.name ?? 'El bloqueo', seed),
+          })
+        }
         lastAttackerId = event.attackerId
         lastDefenderId = event.resolution.defenderId
         if (event.resolution.outcome === 'fault') {
@@ -293,11 +328,11 @@ export const sceneScript = (
             shot:
               reason === 'block'
                 ? 'block'
-                : reason === 'attack' || reason === 'cap'
+                : reason === 'attack' ||
+                    reason === 'cap' ||
+                    reason === 'ace'
                   ? 'point'
-                  : reason === 'ace'
-                    ? 'serve'
-                    : (lastErrorShot ?? 'error'),
+                  : (lastErrorShot ?? 'error'),
           },
           line: {
             ...base,

@@ -92,6 +92,22 @@ export const serveLine = (
   )
 }
 
+export const ballInAirLine = (
+  receiver: string,
+  seed: number,
+): CommentaryLine =>
+  line(
+    pick(
+      [
+        `La pelota cruza la red... ${receiver} la espera.`,
+        `¡Vuela el saque! ${receiver} se acomoda bajo la pelota.`,
+        `Silencio en el estadio: ${receiver} sigue la trayectoria.`,
+      ],
+      seed,
+    ),
+    'excited',
+  )
+
 export const freeBallLine = (
   teamShort: string,
   seed: number,

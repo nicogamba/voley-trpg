@@ -12,6 +12,9 @@ Entrada:
   art-source/principal/ready-to-serve.png
   art-source/principal/tu-ataque-por2.png
   art-source/principal/tu-ataque-por4.png
+  art-source/principal/just-in-attack.png
+  art-source/principal/setter-miss.png
+  art-source/principal/ball-in-air.png
 
 Salida:
   app/src/assets/action/shared/serve.png
@@ -20,6 +23,9 @@ Salida:
   app/src/assets/action/shared/ready-to-serve.png
   app/src/assets/action/shared/attack-2.png
   app/src/assets/action/shared/attack-4.png
+  app/src/assets/action/shared/just-in-attack.png
+  app/src/assets/action/shared/setter-miss.png
+  app/src/assets/action/shared/ball-in-air.png
 """
 
 from __future__ import annotations
@@ -54,6 +60,9 @@ SHOTS = {
     "ready-to-serve": ("ready-to-serve.png", 0.45),
     "attack-2": ("tu-ataque-por2.png", 0.95),
     "attack-4": ("tu-ataque-por4.png", 0.37),
+    "just-in-attack": ("just-in-attack.png", 0.5),
+    "setter-miss": ("setter-miss.png", 0.55),
+    "ball-in-air": ("ball-in-air.png", 0.5),
 }
 
 

@@ -12,6 +12,7 @@ import {
   defenseCandidates,
   isAttackAllowed,
   pickAttackerFor,
+  receptionSaveChance,
   serveFault,
   serveFaultChance,
   serveTargetForZone,
@@ -40,6 +41,18 @@ const create = () =>
     server: 'home',
     targetScore: MATCH_TARGET,
   })
+
+/** Deja al receptor como única opción real para probar una rama puntual. */
+const isolateReceiver = (state: MatchState, receiverId: string): void => {
+  for (const player of state.players) {
+    if (player.side !== 'away' || player.id === receiverId) continue
+    if (player.classId === 'setter') {
+      player.cell = cell('away', 0, 3)
+      continue
+    }
+    player.stats = { ...player.stats, tecnica: -10 }
+  }
+}
 
 describe('motor de partido v2', () => {
   it('arranca en saque con la pelota en el sacador', () => {
@@ -627,6 +640,7 @@ describe('motor de partido v2', () => {
       (player) => player.id === 'away-opposite',
     )!
     receiver.stats = { ...receiver.stats, tecnica: 3 }
+    isolateReceiver(state, receiver.id)
     const target = serveTargetForZone('home', 1)
     const result = serve(state, target, () => 0.5, {}, 2, 1)
     expect(result.events.some((event) => event.type === 'FREE_BALL')).toBe(
@@ -653,6 +667,7 @@ describe('motor de partido v2', () => {
       (player) => player.id === 'away-opposite',
     )!
     receiver.stats = { ...receiver.stats, tecnica: 4 }
+    isolateReceiver(state, receiver.id)
     const setter = state.players.find(
       (player) => player.id === 'away-setter',
     )!
@@ -690,6 +705,7 @@ describe('motor de partido v2', () => {
       (player) => player.id === 'away-opposite',
     )!
     receiver.stats = { ...receiver.stats, tecnica: 0 }
+    isolateReceiver(state, receiver.id)
     const target = serveTargetForZone('home', 1)
     const result = serve(state, target, () => 0.5, {}, 2, 1)
     const serveEvent = result.events.find(
@@ -701,5 +717,67 @@ describe('motor de partido v2', () => {
     }
     expect(result.state.score.home).toBe(1)
     expect(result.state.server).toBe('home')
+  })
+
+  it('el líbero cubre la zona 1 y evita el ace automático', () => {
+    const state = create()
+    const target = serveTargetForZone('home', 1)
+    const result = serve(state, target, () => 0.5, {}, 2, 1)
+    const receive = result.events.find(
+      (event) => event.type === 'RECEIVE',
+    )
+    expect(receive?.type).toBe('RECEIVE')
+    if (receive?.type === 'RECEIVE') {
+      expect(receive.playerId).toBe('away-libero')
+      expect(receive.quality).toBeGreaterThan(0)
+    }
+    expect(result.state.score.home).toBe(0)
+    expect(result.state.phase).toBe('DEFEND')
+  })
+
+  it('una recepción mala puede salvarse con suerte en CT1', () => {
+    const state = createMatch({
+      roster: DEMO_PLAYERS,
+      playerSide: 'home',
+      server: 'home',
+      targetScore: MATCH_TARGET,
+      useTension: true,
+    })
+    const receiver = state.players.find(
+      (player) => player.id === 'away-opposite',
+    )!
+    receiver.stats = { ...receiver.stats, tecnica: 0 }
+    isolateReceiver(state, receiver.id)
+    const rolls = [0.5, 0]
+    const target = serveTargetForZone('home', 1)
+    const result = serve(
+      state,
+      target,
+      () => rolls.shift() ?? 0.5,
+      {},
+      2,
+      1,
+    )
+    const receive = result.events.find(
+      (event) => event.type === 'RECEIVE',
+    )
+    expect(receive?.type).toBe('RECEIVE')
+    if (receive?.type === 'RECEIVE') {
+      expect(receive.quality).toBe(1)
+      expect(receive.dig).toBe(true)
+    }
+    expect(result.state.score.home).toBe(0)
+  })
+
+  it('la salvada depende de lectura y velocidad', () => {
+    const libero = DEMO_PLAYERS.find(
+      (player) => player.id === 'away-libero',
+    )!
+    const opposite = DEMO_PLAYERS.find(
+      (player) => player.id === 'away-opposite',
+    )!
+    expect(receptionSaveChance(libero)).toBeGreaterThan(
+      receptionSaveChance(opposite),
+    )
   })
 })

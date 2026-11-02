@@ -23,6 +23,9 @@ export type ShotId =
   | 'serve'
   | 'readyToServe'
   | 'duel'
+  | 'justInAttack'
+  | 'setterMiss'
+  | 'ballInAir'
   | 'attack2'
   | 'attack4'
   | 'block'
@@ -54,6 +57,8 @@ export type ActionFrameSpec = {
   effect?: SceneEffect
   pose?: ScenePose
   shot?: ShotId
+  /** Voltea el plano horizontalmente (local/visita en el saque). */
+  mirror?: boolean
 }
 
 export type Speaker = 'comentador' | 'jugador' | 'rival'

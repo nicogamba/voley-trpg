@@ -133,6 +133,33 @@ describe('presentación CT1', () => {
     }
   })
 
+  it('renderiza los planos nuevos y el espejado del saque', () => {
+    for (const shot of [
+      'justInAttack',
+      'setterMiss',
+      'ballInAir',
+    ] as const) {
+      const html = renderToString(
+        <ActionFrame
+          frame={{ mode: 'closeup', shot }}
+          players={DEMO_PLAYERS}
+          teams={DEMO_TEAMS}
+          muted
+        />,
+      )
+      expect(html).toContain(`data-shot="${shot}"`)
+    }
+    const mirrored = renderToString(
+      <ActionFrame
+        frame={{ mode: 'closeup', shot: 'serve', mirror: true }}
+        players={DEMO_PLAYERS}
+        teams={DEMO_TEAMS}
+        muted
+      />,
+    )
+    expect(mirrored).toContain('ct1-frame-image is-mirrored')
+  })
+
   it('renderiza el cuadro de acción con banner, sello y sprite', () => {
     const html = renderToString(
       <ActionFrame

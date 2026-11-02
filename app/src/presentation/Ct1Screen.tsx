@@ -296,6 +296,7 @@ export const Ct1Screen = ({
           shot: 'readyToServe',
           banner: 'SAQUE RIVAL',
           tone: 'away',
+          mirror: true,
         }
       : decision === 'serve'
         ? {

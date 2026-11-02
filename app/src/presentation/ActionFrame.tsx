@@ -93,7 +93,11 @@ export const ActionFrame = ({ frame, players, teams, muted }: Props) => {
         data-shot={frame.shot}
         style={style}
       >
-        <img className="ct1-frame-image" src={shotImage} alt="" />
+        <img
+          className={`ct1-frame-image${frame.mirror ? ' is-mirrored' : ''}`}
+          src={shotImage}
+          alt=""
+        />
         <span className="ct1-frame-vignette" aria-hidden="true" />
         {frame.banner && (
           <span className="ct1-frame-banner">{frame.banner}</span>

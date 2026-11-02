@@ -24,7 +24,9 @@ import {
   pickAttackerFor,
   playerById,
   playersOf,
+  receiverForServe,
   receptionQuality,
+  receptionSaveChance,
   receptionValue,
   resolveDuel,
   schemeDefender,
@@ -278,42 +280,6 @@ const startPossession = (
   state.hiddenScheme = null
 }
 
-type ReceiverResult = {
-  receiver: CourtPlayer
-  value: number
-  seam: boolean
-}
-
-const receiverForServe = (
-  state: MatchState,
-  target: CourtCell,
-): ReceiverResult | null => {
-  const side = otherSide(state.server)
-  const roster = playersOf(state, side)
-  const occupant = roster.find((player) => sameCell(player.cell, target))
-  const seam =
-    !occupant &&
-    roster.filter((player) => cellDistance(player.cell, target) <= 1).length >= 2
-  const candidates = (occupant ? [occupant] : roster)
-    .filter((player) => cellDistance(player.cell, target) <= SERVE_REACH)
-    .map((player) => ({
-      receiver: player,
-      value: receptionValue({
-        player,
-        ballCell: target,
-        pressure: 1,
-        seam,
-      }),
-    }))
-    .sort(
-      (a, b) =>
-        b.value - a.value || a.receiver.id.localeCompare(b.receiver.id),
-    )
-  return candidates.length > 0
-    ? { ...candidates[0], seam }
-    : null
-}
-
 /**
  * Elige a quién arma el setter en CT1. Puntúa el mejor ataque disponible
  * de cada atacante y elige entre los mejores para que el armado varíe.
@@ -365,7 +331,13 @@ const autoSet = (
   rng: Rng,
 ): MatchEvent[] => {
   const setter = designatedSetter(state, side, lastTouchId)
-  const distance = manhattan(setter.cell, state.ball)
+  let distance = manhattan(setter.cell, state.ball)
+  // El armador corre a la pelota: una buena cobertura no debe terminar
+  // en error de armado solo por la distancia.
+  if (distance > 2) {
+    setter.cell = { ...state.ball }
+    distance = 0
+  }
   const quality = setQuality(state.passQuality, setter, distance)
 
   if (quality === 0) {
@@ -482,7 +454,13 @@ export const serve = (
     }
   }
 
-  const result = receiverForServe(next, target)
+  const receivingSide = otherSide(next.server)
+  const result = receiverForServe(
+    next,
+    receivingSide,
+    target,
+    pressure,
+  )
   if (!result) {
     const events: MatchEvent[] = [
       {
@@ -504,7 +482,6 @@ export const serve = (
   const requested = choice.receiverId
     ? playerById(next, choice.receiverId)
     : undefined
-  const receivingSide = otherSide(next.server)
   const requestedInReach =
     requested &&
     requested.side === receivingSide &&
@@ -514,18 +491,24 @@ export const serve = (
     ? receptionValue({
         player: receiver,
         ballCell: target,
-        pressure: 1,
+        pressure,
         seam: result.seam,
       })
     : result.value - (requested ? 1 : 0)
-  const effectiveValue = value - (pressure - 1)
-  const quality = receptionQuality(effectiveValue)
+  const effectiveValue = value
+  const rawQuality = receptionQuality(effectiveValue)
+  const saved =
+    rawQuality === 0 &&
+    next.useTension &&
+    rng() < receptionSaveChance(receiver)
+  const quality: Quality = saved ? 1 : rawQuality
   const from = { ...receiver.cell }
   const setter = designatedSetter(next, receivingSide, receiver.id)
   const dig =
-    pressure >= 2 &&
-    (receiver.classId === 'libero' ||
-      (receiver.stats.velocidad >= 4 && receiver.stats.tecnica < 4))
+    saved ||
+    (pressure >= 2 &&
+      (receiver.classId === 'libero' ||
+        (receiver.stats.velocidad >= 4 && receiver.stats.tecnica < 4)))
 
   if (quality === 0) {
     const events: MatchEvent[] = [
@@ -678,8 +661,9 @@ const serveTargetForType = (
   type: ServeType,
 ): CourtCell => {
   const side = otherSide(state.server)
+  const pressure = servePressure(designatedServer(state, state.server))
   const scored = cellsOfSide(side).map((target) => {
-    const result = receiverForServe(state, target)
+    const result = receiverForServe(state, side, target, pressure)
     const value = result?.value ?? -2
     const seam = result?.seam ? 1 : 0
     let score: number
