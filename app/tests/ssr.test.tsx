@@ -71,10 +71,11 @@ describe('UI', () => {
     const html = renderToString(<App />)
     expect(html).toContain('VÓLEY TÁCTICO POR TURNOS')
     expect(html).toContain('ZONA')
-    expect(html).toContain('JUGAR V2 · CANCHA')
+    expect(html).toContain('CAMPAÑA CT1 · 5 ETAPAS')
+    expect(html).toContain('MODO V2 · CANCHA')
     expect(html).toContain('PARTIDO RÁPIDO · V1')
     expect(html).toContain('TUTORIAL · V1')
-    expect(html).toContain('CÓMO SE JUEGA')
+    expect(html).toContain('CÓMO SE JUEGA · CT1')
     expect(html).toContain('El rival ya eligió.')
   })
 

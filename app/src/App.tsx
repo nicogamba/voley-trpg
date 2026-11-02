@@ -5,6 +5,7 @@ import DuelCutIn from './game/DuelCutIn'
 import CourtScreen from './court/CourtScreen'
 import LadderScreen from './court/LadderScreen'
 import Ct1Screen from './presentation/Ct1Screen'
+import { DEMO_SEED } from './presentation/seed'
 import {
   EMPTY_PROGRESS,
   LADDER,
@@ -93,6 +94,13 @@ const App = () => {
   )
   const [campaignMode, setCampaignMode] = useState<'v2' | 'ct1'>('v2')
   const [ladder, setLadder] = useState<LadderProgress>(loadProgress)
+  const debugSeed = useMemo(() => {
+    if (typeof window === 'undefined') return undefined
+    const raw = new URLSearchParams(window.location.search).get('seed')
+    if (!raw) return undefined
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : undefined
+  }, [])
 
   const playerTurn = isPlayerTurn(game)
   const tells = useMemo(() => tellsFor(game), [game])
@@ -215,6 +223,7 @@ const App = () => {
           onBack={() => setCt1Demo(false)}
           onFinish={() => setCt1Demo(false)}
           onToggleMuted={toggleMuted}
+          seed={debugSeed ?? DEMO_SEED}
         />
       )
     }
@@ -232,6 +241,7 @@ const App = () => {
             onToggleMuted={toggleMuted}
             onBack={() => setCourtScreen('ladder')}
             onFinish={finishStage}
+            seed={debugSeed}
           />
         )
       }
@@ -288,7 +298,7 @@ const App = () => {
             setCourtScreen('ladder')
           }}
         />
-        {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
+        {helpOpen && <HelpSheet mode="ct1" onClose={() => setHelpOpen(false)} />}
       </>
     )
   }

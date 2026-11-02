@@ -73,20 +73,20 @@ export const TitleScreen = ({
       <CourtMark />
 
       <div className="title-actions">
-        <button type="button" onClick={onCourt} className="pixel-btn primary big">
-          <span className="blink-arrow">▶</span> JUGAR V2 · CANCHA
+        <button type="button" onClick={onCt1} className="pixel-btn primary big">
+          <span className="blink-arrow">▶</span> CAMPAÑA CT1 · 5 ETAPAS
         </button>
-        <button type="button" onClick={onPlay} className="pixel-btn secondary">
+        <button type="button" onClick={onCourt} className="pixel-btn secondary">
+          MODO V2 · CANCHA
+        </button>
+        <button type="button" onClick={onPlay} className="pixel-btn ghost">
           PARTIDO RÁPIDO · V1
         </button>
         <button type="button" onClick={onTutorial} className="pixel-btn ghost">
           TUTORIAL · V1
         </button>
-        <button type="button" onClick={onCt1} className="pixel-btn ghost">
-          CT1 · DEMO DE SENSACIÓN
-        </button>
         <button type="button" onClick={onHelp} className="pixel-btn ghost">
-          CÓMO SE JUEGA
+          CÓMO SE JUEGA · CT1
         </button>
       </div>
     </div>
@@ -96,9 +96,11 @@ export const TitleScreen = ({
 
 type HelpProps = {
   onClose: () => void
+  /** Manual de la campaña CT1 o del modo v2. */
+  mode?: 'v2' | 'ct1'
 }
 
-const HELP_CARDS = [
+const HELP_CARDS_V2 = [
   {
     title: 'Tres pasos, una jugada',
     body: 'Cada posesión es recepción → armado → ataque. Elegís una acción por paso. El tablero te dice dónde tocar.',
@@ -129,39 +131,81 @@ const HELP_CARDS = [
   },
 ]
 
-export const HelpSheet = ({ onClose }: HelpProps) => (
-  <div className="sheet-overlay">
-    <div className="sheet-card scanlines">
-      <div className="sheet-head">
-        <div>
-          <p className="sheet-kicker">MANUAL DE BOLSILLO</p>
-          <h2 className="sheet-title">CÓMO SE JUEGA</h2>
+const HELP_CARDS_CT1 = [
+  {
+    title: 'Campaña CT1',
+    body: 'Cinco etapas hasta la final. Cada una es un set a 25 con ventaja de 2 y arranca cerca del cierre (18-18, 17-18, 17-19, 16-19, 16-20). Si perdés, reintentás la misma etapa.',
+  },
+  {
+    title: 'El partido es por turnos',
+    body: 'Elegís un comando y después ves la jugada. El texto se escribe solo: si ya terminó, un toque avanza; si todavía está escribiendo, el primero completa y el segundo avanza.',
+  },
+  {
+    title: 'Saque por zonas',
+    body: 'Elegís zona 1, 5, 6 o corto. El destino es una intención: el saque puede irse a la red o afuera. El líbero y los compañeros cubren, así que no hay ace garantizado.',
+  },
+  {
+    title: 'Recepción y armado',
+    body: 'La recepción es automática: perfecta, buena o exigida. El armador elige al atacante y el lado (por 2 o por 4). El menú de ataque muestra solo los golpes de ese atacante.',
+  },
+  {
+    title: 'Ataque',
+    body: 'Potencia, colocación, rápido, pipe, wipe y finta. Cada uno tiene su costo de tensión y su riesgo de red o afuera. El rápido es del central; el pipe del opuesto desde el fondo.',
+  },
+  {
+    title: 'Defensa y bloqueo',
+    body: 'Elegís MURO, ABIERTO, PROFUNDO o LÍBERO. Si el ataque toca el bloqueo, puede morir en el piso (stuff), irse afuera o quedar vivo para que la defensa lo levante.',
+  },
+  {
+    title: 'Tensión',
+    body: 'Arranca en 30/100. Sube con buenas recepciones y puntos; baja al perder el punto. Paga potencia, wipe, pipe y las técnicas defensivas. No es energía por rally.',
+  },
+  {
+    title: 'Cada punto se festeja',
+    body: 'Después del resultado aparece el festejo del equipo que ganó. Al ganar la final, la gira termina con Argentina campeón.',
+  },
+]
+
+export const HelpSheet = ({ onClose, mode = 'v2' }: HelpProps) => {
+  const cards = mode === 'ct1' ? HELP_CARDS_CT1 : HELP_CARDS_V2
+  return (
+    <div className="sheet-overlay">
+      <div className="sheet-card scanlines">
+        <div className="sheet-head">
+          <div>
+            <p className="sheet-kicker">
+              {mode === 'ct1' ? 'MANUAL CT1' : 'MANUAL DE BOLSILLO'}
+            </p>
+            <h2 className="sheet-title">
+              {mode === 'ct1' ? 'CÓMO SE JUEGA · CT1' : 'CÓMO SE JUEGA'}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="pixel-btn icon-btn"
+          >
+            ×
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar"
-          className="pixel-btn icon-btn"
-        >
-          ×
+        <div className="sheet-list">
+          {cards.map((card, index) => (
+            <div key={card.title} className="sheet-item">
+              <p className="sheet-item-title">
+                <span>{index + 1}.</span> {card.title}
+              </p>
+              <p className="sheet-item-body">{card.body}</p>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={onClose} className="pixel-btn primary">
+          ENTENDIDO
         </button>
       </div>
-      <div className="sheet-list">
-        {HELP_CARDS.map((card, index) => (
-          <div key={card.title} className="sheet-item">
-            <p className="sheet-item-title">
-              <span>{index + 1}.</span> {card.title}
-            </p>
-            <p className="sheet-item-body">{card.body}</p>
-          </div>
-        ))}
-      </div>
-      <button type="button" onClick={onClose} className="pixel-btn primary">
-        ENTENDIDO
-      </button>
     </div>
-  </div>
-)
+  )
+}
 
 const HINTS: Partial<Record<Phase, { title: string; body: string }>> = {
   SERVE: {

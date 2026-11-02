@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { CLASS_LETTERS, CLASS_NAMES } from '../engine'
+import { HelpSheet } from '../game/Tutorial'
 import { Flag } from './TeamBadge'
 import {
   LADDER,
@@ -70,6 +71,7 @@ export const LadderScreen = ({
   onReset,
   ct1 = false,
 }: Props) => {
+  const [helpOpen, setHelpOpen] = useState(false)
   const complete = isLadderComplete(progress)
   const stage = stageAt(progress)
   const rival = stage ? TEAMS[stage.rival] : TEAMS.bra
@@ -105,9 +107,19 @@ export const LadderScreen = ({
               : `ETAPA ${progress.stage + 1}/${LADDER.length}`}
           </b>
         </div>
-        <span className="ladder-badge">
-          {`${progress.cleared}/${LADDER.length}`}
-        </span>
+        <div className="ladder-head-tools">
+          <span className="ladder-badge">
+            {`${progress.cleared}/${LADDER.length}`}
+          </span>
+          <button
+            type="button"
+            className="court-chip"
+            onClick={() => setHelpOpen(true)}
+            aria-label="Ayuda"
+          >
+            ?
+          </button>
+        </div>
       </header>
 
       <div className="ladder-main">
@@ -226,6 +238,13 @@ export const LadderScreen = ({
               : `GANÁ ${stage?.targetScore} PUNTOS PARA AVANZAR`}
           </p>
         </footer>
+      )}
+
+      {helpOpen && (
+        <HelpSheet
+          mode={ct1 ? 'ct1' : 'v2'}
+          onClose={() => setHelpOpen(false)}
+        />
       )}
     </div>
   )

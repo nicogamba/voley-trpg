@@ -12,6 +12,7 @@ type Props = {
   bottom: ReactNode
   muted?: boolean
   onToggleMuted?: () => void
+  onHelp?: () => void
 }
 
 export const PresentationShell = ({
@@ -24,6 +25,7 @@ export const PresentationShell = ({
   bottom,
   muted,
   onToggleMuted,
+  onHelp,
 }: Props) => (
   <div className="ct1-screen">
     <div className="ct1-top">
@@ -56,6 +58,16 @@ export const PresentationShell = ({
         </div>
 
         <div className="ct1-score-actions">
+          {onHelp && (
+            <button
+              type="button"
+              className="ct1-icon-btn"
+              onClick={onHelp}
+              aria-label="Ayuda"
+            >
+              ?
+            </button>
+          )}
           {onToggleMuted && (
             <button
               type="button"

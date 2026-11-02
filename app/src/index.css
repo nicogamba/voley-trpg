@@ -1003,7 +1003,7 @@ button:disabled {
 .sheet-overlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 80;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2996,6 +2996,12 @@ button:disabled {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-align: center;
+}
+
+.ladder-head-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .ladder-main {

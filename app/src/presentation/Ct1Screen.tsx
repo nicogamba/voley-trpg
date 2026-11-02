@@ -33,18 +33,19 @@ import ActionStage from './ActionStage'
 import CommandBox from './CommandBox'
 import CommentBox from './CommentBox'
 import PresentationShell from './PresentationShell'
+import { HelpSheet } from '../game/Tutorial'
 import {
   endLine,
   kickoffLine,
   matchIntroLine,
 } from './content/commentary'
 import { sceneScript } from './sceneScript'
+import { resolveMatchSeed } from './seed'
 import type { ActionFrameSpec, CommandOption, Scene, SceneMeta } from './types'
 import './presentation.css'
 
 const DEMO_TARGET = 25
 const DEMO_START = { home: 17, away: 19 }
-const DEMO_SEED = 0x20261027
 
 const SERVE_ZONES: ServeZone[] = [1, 5, 6, 'short']
 
@@ -84,6 +85,8 @@ type Props = {
   onBack: () => void
   onFinish: (won: boolean) => void
   onToggleMuted?: () => void
+  /** Semilla fija para demos, tests o reproducir una partida. */
+  seed?: number
 }
 
 export const Ct1Screen = ({
@@ -92,6 +95,7 @@ export const Ct1Screen = ({
   onBack,
   onFinish,
   onToggleMuted,
+  seed,
 }: Props) => {
   const teams = useMemo<Record<Side, CourtTeam>>(
     () => ({ home: TEAMS.arg, away: TEAMS[stage.rival] }),
@@ -105,7 +109,9 @@ export const Ct1Screen = ({
   const [log, setLog] = useState<string[]>([])
   const [intro, setIntro] = useState(true)
   const [runId, setRunId] = useState(0)
-  const rngRef = useRef<Rng>(mulberry32(DEMO_SEED))
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [matchSeed] = useState(() => resolveMatchSeed(seed))
+  const rngRef = useRef<Rng>(mulberry32(matchSeed))
 
   const currentScene = scenes[sceneIndex]
   const decision = nextDecision(match)
@@ -442,17 +448,23 @@ export const Ct1Screen = ({
   )
 
   return (
-    <PresentationShell
-      teams={teams}
-      score={displayScore}
-      targetScore={DEMO_TARGET}
-      server={match.server}
-      onBack={onBack}
-      top={top}
-      bottom={bottom}
-      muted={muted}
-      onToggleMuted={onToggleMuted}
-    />
+    <>
+      <PresentationShell
+        teams={teams}
+        score={displayScore}
+        targetScore={DEMO_TARGET}
+        server={match.server}
+        onBack={onBack}
+        top={top}
+        bottom={bottom}
+        muted={muted}
+        onToggleMuted={onToggleMuted}
+        onHelp={() => setHelpOpen(true)}
+      />
+      {helpOpen && (
+        <HelpSheet mode="ct1" onClose={() => setHelpOpen(false)} />
+      )}
+    </>
   )
 }
 

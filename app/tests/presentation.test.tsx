@@ -7,6 +7,8 @@ import ActionFrame from '../src/presentation/ActionFrame'
 import CommandBox from '../src/presentation/CommandBox'
 import CommentBox from '../src/presentation/CommentBox'
 import Ct1Screen from '../src/presentation/Ct1Screen'
+import { resolveMatchSeed } from '../src/presentation/seed'
+import { HelpSheet, TitleScreen } from '../src/game/Tutorial'
 import type {
   ActionFrameSpec,
   CommentaryLine,
@@ -45,6 +47,38 @@ const frame: ActionFrameSpec = {
 }
 
 describe('presentación CT1', () => {
+  it('respeta una seed fija y genera una válida si falta', () => {
+    expect(resolveMatchSeed(123)).toBe(123)
+    const random = resolveMatchSeed()
+    expect(random).toBeGreaterThanOrEqual(0)
+    expect(random).toBeLessThan(0x100000000)
+  })
+
+  it('muestra el manual CT1 y la campaña como entrada principal', () => {
+    const help = renderToString(
+      <HelpSheet mode="ct1" onClose={() => {}} />,
+    )
+    expect(help).toContain('MANUAL CT1')
+    expect(help).toContain('Campaña CT1')
+    expect(help).toContain('Tensión')
+
+    const title = renderToString(
+      <TitleScreen
+        muted
+        onPlay={() => {}}
+        onTutorial={() => {}}
+        onToggleMuted={() => {}}
+        onHelp={() => {}}
+        onCourt={() => {}}
+        onCt1={() => {}}
+      />,
+    )
+    expect(title).toContain('CAMPAÑA CT1')
+    expect(title).toContain('MODO V2')
+    expect(title).toContain('CÓMO SE JUEGA · CT1')
+    expect(title).not.toContain('CT1 · DEMO DE SENSACIÓN')
+  })
+
   it('renderiza la pantalla partida con el saque rival y el marcador 17-19', () => {
     const html = renderToString(
       <Ct1Screen

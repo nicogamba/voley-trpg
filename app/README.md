@@ -12,18 +12,18 @@ leer la jugada rival y comprometerse antes de ver el resultado.
   bloqueado 700 ms y franja **ÚLTIMA** para releer la jugada.
 - **v1.3.2 “Ritmo”**: los turnos de la IA (saque, recepción y armado rival)
   esperan **CONTINUAR** y narran el último movimiento.
-- **S1 “Shell CT1” (demo)**: pantalla partida, comando → cuadro de acción →
-  relato → resultado. Set a 25 desde 17-19, motor **6v6** con rotación
-  side-out y líbero en zaga.
-- 159 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
+- **Campaña CT1**: pantalla partida, comando → cuadro de acción → relato →
+  resultado. Cinco etapas, set a 25, motor **6v6** con rotación side-out,
+  líbero en zaga, bloqueo vivo y festejo de punto.
+- 161 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
 - Balance simulado con 500 partidos IA vs IA (ver más abajo).
-- Pendiente: playtest con 5 personas y deploy en Vercel.
+- Pendiente: ejecutar el playtest de 5 personas (`playtest-ct1.md`) y verificar el deploy en Vercel.
 
-## Demo CT1 (S1)
+## Campaña CT1
 
-La maqueta de sensación estilo Captain Tsubasa 1 vive en
-`src/presentation/`. Se entra desde la portada con **CT1 · DEMO DE SENSACIÓN**
-o agregando `?ct1=1` a la URL.
+La campaña estilo Captain Tsubasa 1 vive en `src/presentation/`. Se entra desde
+la portada con **CAMPAÑA CT1 · 5 ETAPAS**; la demo rápida de la final queda en
+`?ct1=1`. Para reproducir una partida, agregar `?seed=123`.
 
 - Pantalla partida: acción arriba, relator y comandos abajo.
 - El jugador elige un comando y después ve la jugada; el resultado aparece en
@@ -31,6 +31,8 @@ o agregando `?ct1=1` a la URL.
 - La campaña recorre las **5 etapas** de la escalera; cada una arranca en su
   marcador inicial (18-18, 17-18, 17-19, 16-19, 16-20), con **saque local** y
   previa de Nando. La demo rápida `?ct1=1` juega la final desde 16-20.
+- **Ayuda CT1:** botón `?` en portada, escalera y partido.
+- **Seed:** cada partida/reintento usa una seed distinta; `?seed=` reproduce.
 - **Saque por destino:** zona 1, 5, 6 o corto. El riesgo de red/afuera sale de
   los stats del sacador y del destino.
 - **Recepción:** perfecta, buena, exigida, dig, cayó en un compañero, free ball,
@@ -58,7 +60,7 @@ o agregando `?ct1=1` a la URL.
 
 El motor ya es **6v6 con rotación**, saque local, tensión y campaña de 5
 etapas. También puede fallar el ataque (afuera o a la red). Falta arte final,
-relator contextual, playtest y deploy.
+playtest, retratos de rivales, técnicas especiales y pulido.
 
 ### Arte de acción
 
@@ -175,7 +177,7 @@ npm run dev
 El servidor queda en `http://127.0.0.1:5173/` (o el siguiente puerto libre).
 
 ```bash
-npm test        # 159 tests: motor, comandos, store, simulación, escenas y render
+npm test        # 161 tests: motor, comandos, store, simulación, escenas y render
 npm run build   # tsc -b && vite build
 npm run lint    # oxlint
 npm run preview # sirve dist/
@@ -194,7 +196,8 @@ app/
 gdd_v1.3.md          GDD vigente: diseño, fórmulas, IA, métricas y riesgos
 hoja_de_numeros.md   fuente de verdad de las fórmulas y tablas de balance v1.3
 gdd_v1.1.md          GDD v1.2 histórico (movimiento y preview A/B/D)
-playtest.md          guion, planilla y métricas para el playtest de 5 personas
+playtest.md          guion, planilla y métricas del playtest v1.3
+playtest-ct1.md      guion, planilla y métricas del playtest CT1
 ```
 
 ## Simulación
@@ -225,7 +228,7 @@ npx vitest run tests/simulate.test.ts --silent=false
 
 - **S3:** arte final, relator contextual, intro/cierre de partido y QA en
   360×640 / 390×844.
-- Playtest de 5 personas con el guion y la planilla de `playtest.md`.
+- Playtest de 5 personas con el guion y la planilla de `playtest-ct1.md`.
 - Ajustar una sola palanca por iteración con la simulación de 500 partidos.
 - Sprites pixel art y arte de fondo después de validar el loop con placeholders
   geométricos.
