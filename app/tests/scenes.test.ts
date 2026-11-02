@@ -41,7 +41,7 @@ describe('guion de escenas CT1', () => {
       },
     ]
     const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
-    expect(scenes).toHaveLength(2)
+    expect(scenes).toHaveLength(3)
     expect(scenes[0].frame.mode).toBe('closeup')
     expect(scenes[0].frame.banner).toBe('SAQUE')
     expect(scenes[0].frame.shot).toBe('serve')
@@ -50,6 +50,8 @@ describe('guion de escenas CT1', () => {
     expect(scenes[1].frame.shot).toBe('point')
     expect(scenes[1].score).toEqual({ home: 25, away: 24 })
     expect(scenes[1].line.text).toContain('ACE')
+    expect(scenes[2].frame.shot).toBe('pointCelebration')
+    expect(scenes[2].score).toEqual({ home: 25, away: 24 })
   })
 
   it('muestra el ataque, el dig y el armado como tres cuadros', () => {
@@ -132,15 +134,134 @@ describe('guion de escenas CT1', () => {
       },
     ]
     const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
-    expect(scenes).toHaveLength(3)
+    expect(scenes).toHaveLength(4)
     expect(scenes[0].frame.shot).toBe('justInAttack')
     expect(scenes[1].frame.banner).toBe('¡BLOQUEO!')
     expect(scenes[1].frame.shot).toBe('duel')
     expect(scenes[1].line.text.length).toBeGreaterThan(0)
     expect(scenes[2].frame.stamp).toBe('¡BLOQUEO!')
     expect(scenes[2].frame.actorId).toBe('away-middle')
-    expect(scenes[2].frame.shot).toBe('block')
+    expect(scenes[2].frame.shot).toBe('point')
     expect(scenes[2].score).toEqual({ home: 0, away: 1 })
+    expect(scenes[3].frame.shot).toBe('pointCelebration')
+  })
+
+  it('muestra el bloqueo que se va afuera y el punto del atacante', () => {
+    const pre = create()
+    const events: MatchEvent[] = [
+      {
+        type: 'ATTACK',
+        attackerId: 'home-opposite',
+        kind: 'wipe',
+        target: cell('away', 2, 0),
+        resolution: {
+          A: 4,
+          D: 7,
+          edge: -2,
+          zone: 2,
+          outcome: 'blocked',
+          block: 'out',
+          digQuality: null,
+          defenderId: 'away-middle',
+          blockerIds: ['away-middle'],
+          scheme: 'wall',
+        },
+      },
+      {
+        type: 'POINT',
+        side: 'home',
+        reason: 'blockOut',
+        score: { home: 1, away: 0 },
+      },
+    ]
+    const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
+    expect(scenes[1].frame.banner).toBe('¡AFUERA!')
+    expect(scenes[1].line.text).toMatch(/afuera|cancha|escapa/)
+    expect(scenes[2].frame.shot).toBe('error')
+    expect(scenes[2].frame.stamp).toBe('¡AFUERA!')
+    expect(scenes[2].frame.actorId).toBe('home-opposite')
+    expect(scenes[2].score).toEqual({ home: 1, away: 0 })
+    expect(scenes[3].frame.shot).toBe('pointCelebration')
+  })
+
+  it('muestra el toque vivo y la levantada del bloqueo', () => {
+    const pre = create()
+    const events: MatchEvent[] = [
+      {
+        type: 'ATTACK',
+        attackerId: 'home-opposite',
+        kind: 'power',
+        target: cell('away', 2, 0),
+        resolution: {
+          A: 4,
+          D: 7,
+          edge: 1,
+          zone: 2,
+          outcome: 'blocked',
+          block: 'touch',
+          digQuality: null,
+          defenderId: 'away-middle',
+          blockerIds: ['away-middle'],
+          scheme: 'wall',
+        },
+      },
+      {
+        type: 'DIG',
+        defenderId: 'away-libero',
+        from: cell('away', 2, 0),
+        to: cell('away', 0, 2),
+        quality: 2,
+      },
+      {
+        type: 'SET',
+        setterId: 'away-setter',
+        quality: 2,
+        to: cell('away', 0, 2),
+        outcome: 'ok',
+      },
+    ]
+    const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
+    expect(scenes[1].frame.banner).toBe('¡TOQUE!')
+    expect(scenes[1].line.text).toMatch(/viva|salvarla|sigue/)
+    expect(scenes[2].frame.shot).toBe('dig')
+    expect(scenes[2].frame.banner).toBe('¡DIG!')
+    expect(scenes[3].frame.shot).toBe('set')
+  })
+
+  it('muestra el toque que cae del lado del bloqueo', () => {
+    const pre = create()
+    const events: MatchEvent[] = [
+      {
+        type: 'ATTACK',
+        attackerId: 'home-opposite',
+        kind: 'power',
+        target: cell('away', 2, 0),
+        resolution: {
+          A: 4,
+          D: 7,
+          edge: 1,
+          zone: 2,
+          outcome: 'blocked',
+          block: 'touch',
+          digQuality: null,
+          defenderId: 'away-middle',
+          blockerIds: ['away-middle'],
+          scheme: 'wall',
+        },
+      },
+      {
+        type: 'POINT',
+        side: 'home',
+        reason: 'blockDown',
+        score: { home: 1, away: 0 },
+      },
+    ]
+    const scenes = sceneScript(pre, events, pre, DEMO_TEAMS)
+    expect(scenes[1].frame.banner).toBe('¡TOQUE!')
+    expect(scenes[2].frame.shot).toBe('point')
+    expect(scenes[2].frame.stamp).toBe('¡PUNTO!')
+    expect(scenes[2].line.text).toContain('lado del bloqueo')
+    expect(scenes[3].frame.shot).toBe('pointCelebration')
   })
 
   it('usa el plano de punto y el de cierre según el ganador', () => {

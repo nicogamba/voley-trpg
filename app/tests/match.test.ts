@@ -13,10 +13,12 @@ import {
   isAttackAllowed,
   pickAttackerFor,
   receptionSaveChance,
+  resolveBlockOutcome,
   serveFault,
   serveFaultChance,
   serveTargetForZone,
   serveZoneRisk,
+  type DuelResolution,
   type MatchState,
 } from '../src/court/match'
 import {
@@ -779,5 +781,177 @@ describe('motor de partido v2', () => {
     expect(receptionSaveChance(libero)).toBeGreaterThan(
       receptionSaveChance(opposite),
     )
+  })
+
+  it('resuelve stuff, block out y toque vivo', () => {
+    const state = create()
+    const defender = state.players.find(
+      (player) => player.id === 'away-middle',
+    )!
+    const resolution: DuelResolution = {
+      A: 4,
+      D: 8,
+      edge: 2,
+      zone: 1,
+      outcome: 'blocked',
+      digQuality: null,
+      defenderId: defender.id,
+      blockerIds: ['away-middle', 'away-setter', 'away-wing-1'],
+      scheme: 'wall',
+    }
+    expect(resolveBlockOutcome(resolution, defender, 'wipe', () => 0)).toBe(
+      'out',
+    )
+    expect(
+      resolveBlockOutcome(resolution, defender, 'power', () => 0.2),
+    ).toBe('stuff')
+    expect(
+      resolveBlockOutcome(resolution, defender, 'power', () => 0.99),
+    ).toBe('touch')
+  })
+
+  const blockedState = () => {
+    const state = create()
+    state.phase = 'ATTACK'
+    state.possession = 'home'
+    state.setQuality = 2
+    state.ap = 3
+    state.hiddenScheme = 'wall'
+    const attacker = state.players.find(
+      (player) => player.id === 'home-opposite',
+    )!
+    attacker.stats = { ...attacker.stats, potencia: 0, tecnica: 0 }
+    return state
+  }
+
+  const rolls = (...values: number[]) => {
+    const queue = [...values]
+    return () => queue.shift() ?? 0.5
+  }
+
+  it('un bloqueo limpio da el punto al que bloqueó', () => {
+    const state = blockedState()
+    const result = attack(
+      state,
+      'power',
+      cell('away', 0, 1),
+      rolls(0.5, 0.2),
+      { attackerId: 'home-opposite' },
+    )
+    const point = result.events.find((event) => event.type === 'POINT')
+    expect(point?.type).toBe('POINT')
+    if (point?.type === 'POINT') {
+      expect(point.side).toBe('away')
+      expect(point.reason).toBe('block')
+    }
+    expect(result.state.score.away).toBe(1)
+    expect(result.state.server).toBe('away')
+  })
+
+  it('un block out da el punto al atacante', () => {
+    const state = blockedState()
+    const result = attack(
+      state,
+      'wipe',
+      cell('away', 0, 1),
+      rolls(0.5, 0),
+      { attackerId: 'home-opposite' },
+    )
+    const point = result.events.find((event) => event.type === 'POINT')
+    expect(point?.type).toBe('POINT')
+    if (point?.type === 'POINT') {
+      expect(point.side).toBe('home')
+      expect(point.reason).toBe('blockOut')
+    }
+    expect(result.state.score.home).toBe(1)
+    expect(result.state.server).toBe('home')
+  })
+
+  it('un toque vivo sigue con el dig del bloqueo', () => {
+    const state = blockedState()
+    const result = attack(
+      state,
+      'power',
+      cell('away', 0, 1),
+      rolls(0.5, 0.99),
+      { attackerId: 'home-opposite' },
+    )
+    expect(
+      result.events.filter((event) => event.type === 'DIG'),
+    ).toHaveLength(1)
+    expect(result.events.some((event) => event.type === 'SET')).toBe(true)
+    expect(result.events.some((event) => event.type === 'POINT')).toBe(false)
+    expect(result.state.possession).toBe('away')
+    expect(result.state.phase).toBe('DEFEND')
+  })
+
+  it('un toque que nadie levanta da el punto al atacante', () => {
+    const state = blockedState()
+    for (const player of state.players) {
+      if (player.side === 'away' && player.cell.row === 2) {
+        player.stats = { ...player.stats, tecnica: 0 }
+      }
+    }
+    const result = attack(
+      state,
+      'power',
+      cell('away', 0, 1),
+      rolls(0.5, 0.99),
+      { attackerId: 'home-opposite' },
+    )
+    const point = result.events.find((event) => event.type === 'POINT')
+    expect(point?.type).toBe('POINT')
+    if (point?.type === 'POINT') {
+      expect(point.side).toBe('home')
+      expect(point.reason).toBe('blockDown')
+    }
+  })
+
+  const defendBlockState = () => {
+    const state = createMatch({
+      roster: DEMO_PLAYERS,
+      playerSide: 'home',
+      server: 'away',
+      targetScore: MATCH_TARGET,
+    })
+    state.phase = 'DEFEND'
+    state.possession = 'away'
+    state.setQuality = 2
+    state.ap = 3
+    state.hiddenAttack = {
+      attackerId: 'away-opposite',
+      kind: 'power',
+      target: cell('home', 0, 1),
+    }
+    const attacker = state.players.find(
+      (player) => player.id === 'away-opposite',
+    )!
+    attacker.stats = { ...attacker.stats, potencia: 0, tecnica: 0 }
+    return state
+  }
+
+  it('el jugador también bloquea para punto', () => {
+    const state = defendBlockState()
+    const result = defend(state, 'wall', rolls(0.5, 0.2))
+    const point = result.events.find((event) => event.type === 'POINT')
+    expect(point?.type).toBe('POINT')
+    if (point?.type === 'POINT') {
+      expect(point.side).toBe('home')
+      expect(point.reason).toBe('block')
+    }
+    expect(result.state.score.home).toBe(1)
+    expect(result.state.server).toBe('home')
+  })
+
+  it('el jugador bloquea y su defensa levanta el toque', () => {
+    const state = defendBlockState()
+    const result = defend(state, 'wall', rolls(0.5, 0.99))
+    expect(
+      result.events.filter((event) => event.type === 'DIG'),
+    ).toHaveLength(1)
+    expect(result.events.some((event) => event.type === 'SET')).toBe(true)
+    expect(result.events.some((event) => event.type === 'POINT')).toBe(false)
+    expect(result.state.possession).toBe('home')
+    expect(result.state.phase).toBe('ATTACK')
   })
 })

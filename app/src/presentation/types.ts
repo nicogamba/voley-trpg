@@ -39,6 +39,7 @@ export type ShotId =
   | 'freeBall'
   | 'celebrate'
   | 'defeat'
+  | 'pointCelebration'
 
 export type Expression =
   | 'neutral'

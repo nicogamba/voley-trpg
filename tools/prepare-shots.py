@@ -15,6 +15,7 @@ Entrada:
   art-source/principal/just-in-attack2.png
   art-source/principal/setter-miss.png
   art-source/principal/ball-in-air.png
+  art-source/principal/point-celebration.png
 
 Salida:
   app/src/assets/action/shared/serve.png
@@ -26,6 +27,7 @@ Salida:
   app/src/assets/action/shared/just-in-attack.png
   app/src/assets/action/shared/setter-miss.png
   app/src/assets/action/shared/ball-in-air.png
+  app/src/assets/action/shared/point-celebration.png
 """
 
 from __future__ import annotations
@@ -63,6 +65,7 @@ SHOTS = {
     "just-in-attack": ("just-in-attack2.png", 0.5),
     "setter-miss": ("setter-miss.png", 0.55),
     "ball-in-air": ("ball-in-air.png", 0.5),
+    "point-celebration": ("point-celebration.png", 0.5),
 }
 
 

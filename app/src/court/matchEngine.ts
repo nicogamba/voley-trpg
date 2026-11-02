@@ -28,6 +28,7 @@ import {
   receptionQuality,
   receptionSaveChance,
   receptionValue,
+  resolveBlockOutcome,
   resolveDuel,
   schemeDefender,
   serveFault,
@@ -39,6 +40,7 @@ import {
   type DuelResolution,
   type MatchEvent,
   type MatchState,
+  type PointReason,
   type ServeZone,
 } from './match'
 import { chooseAttackPlan, chooseDefenseScheme, chooseServeTarget } from './matchAi'
@@ -211,7 +213,7 @@ export const rotateSide = (state: MatchState, side: Side): void => {
 const awardPoint = (
   state: MatchState,
   side: Side,
-  reason: 'ace' | 'error' | 'attack' | 'block' | 'cap',
+  reason: PointReason,
 ): MatchEvent[] => {
   const previousServer = state.server
   state.score[side] += 1
@@ -702,6 +704,47 @@ export const serveAuto = (
   )
 }
 
+type BlockDigResult = {
+  digger: CourtPlayer
+  quality: Quality
+  blockCell: CourtCell
+}
+
+/** Elige al defensa de fondo que levanta un bloqueo que quedó vivo. */
+const resolveBlockDig = (
+  state: MatchState,
+  side: Side,
+  resolution: DuelResolution,
+): BlockDigResult | null => {
+  const blocker = playerById(state, resolution.defenderId)
+  const blockCell = blocker
+    ? { ...blocker.cell }
+    : { ...state.ball }
+  const backRow = playersOf(state, side).filter(
+    (player) => player.cell.row === 2,
+  )
+  const pool = backRow.length > 0 ? backRow : playersOf(state, side)
+  const best = pool
+    .map((player) => ({
+      digger: player,
+      value: receptionValue({
+        player,
+        ballCell: blockCell,
+        pressure: 2,
+        seam: false,
+      }),
+    }))
+    .sort(
+      (a, b) =>
+        b.value - a.value ||
+        a.digger.id.localeCompare(b.digger.id),
+    )[0]
+  if (!best) return null
+  const quality = receptionQuality(best.value)
+  if (quality === 0) return null
+  return { digger: best.digger, quality, blockCell }
+}
+
 export const attack = (
   state: MatchState,
   kind: AttackKind,
@@ -799,6 +842,16 @@ export const attack = (
     scheme,
     attackTechnique: technique?.id,
   })
+  if (resolution.outcome === 'blocked') {
+    const blocker = playerById(next, resolution.defenderId)
+    assert(blocker, 'El bloqueo no tiene protagonista.')
+    resolution.block = resolveBlockOutcome(
+      resolution,
+      blocker,
+      kind,
+      rng,
+    )
+  }
   next.rallyAttacks += 1
   next.attackerId = attacker.id
   next.hiddenScheme = null
@@ -821,11 +874,50 @@ export const attack = (
     }
   }
   if (resolution.outcome === 'blocked') {
+    const defendingSide = otherSide(attacker.side)
+    const block = resolution.block ?? 'stuff'
+    if (block === 'stuff') {
+      return {
+        state: next,
+        events: [...events, ...awardPoint(next, defendingSide, 'block')],
+      }
+    }
+    if (block === 'out') {
+      return {
+        state: next,
+        events: [...events, ...awardPoint(next, attacker.side, 'blockOut')],
+      }
+    }
+    const dig = resolveBlockDig(next, defendingSide, resolution)
+    if (!dig) {
+      return {
+        state: next,
+        events: [...events, ...awardPoint(next, attacker.side, 'blockDown')],
+      }
+    }
+    const setter = designatedSetter(next, defendingSide, dig.digger.id)
+    const digFrom = { ...dig.digger.cell }
+    movePlayer(next, dig.digger.id, dig.blockCell)
+    startPossession(
+      next,
+      defendingSide,
+      dig.blockCell,
+      dig.quality,
+      MATCH_AP_START + (dig.quality === 3 ? MATCH_AP_REFUND : 0),
+    )
+    const blockDigEvent: MatchEvent = {
+      type: 'DIG',
+      defenderId: dig.digger.id,
+      from: digFrom,
+      to: { ...setter.cell },
+      quality: dig.quality,
+    }
     return {
       state: next,
       events: [
         ...events,
-        ...awardPoint(next, otherSide(attacker.side), 'block'),
+        blockDigEvent,
+        ...autoSet(next, defendingSide, dig.digger.id, rng),
       ],
     }
   }
@@ -980,6 +1072,16 @@ export const defend = (
     defenseTechnique: technique?.id,
     attackTechnique: plan.technique,
   })
+  if (resolution.outcome === 'blocked') {
+    const blocker = playerById(next, resolution.defenderId)
+    assert(blocker, 'El bloqueo no tiene protagonista.')
+    resolution.block = resolveBlockOutcome(
+      resolution,
+      blocker,
+      plan.kind,
+      rng,
+    )
+  }
   next.defenseTechniqueUsed =
     next.defenseTechniqueUsed || Boolean(technique)
   next.rallyAttacks += 1
@@ -1004,11 +1106,61 @@ export const defend = (
     }
   }
   if (resolution.outcome === 'blocked') {
+    const block = resolution.block ?? 'stuff'
+    if (block === 'stuff') {
+      return {
+        state: next,
+        events: [
+          ...events,
+          ...awardPoint(next, next.playerSide, 'block'),
+        ],
+      }
+    }
+    if (block === 'out') {
+      return {
+        state: next,
+        events: [
+          ...events,
+          ...awardPoint(next, attacker.side, 'blockOut'),
+        ],
+      }
+    }
+    const blockDig = resolveBlockDig(next, next.playerSide, resolution)
+    if (!blockDig) {
+      return {
+        state: next,
+        events: [
+          ...events,
+          ...awardPoint(next, attacker.side, 'blockDown'),
+        ],
+      }
+    }
+    const blockSetter = designatedSetter(
+      next,
+      next.playerSide,
+      blockDig.digger.id,
+    )
+    const blockDigFrom = { ...blockDig.digger.cell }
+    movePlayer(next, blockDig.digger.id, blockDig.blockCell)
+    startPossession(
+      next,
+      next.playerSide,
+      blockDig.blockCell,
+      blockDig.quality,
+      MATCH_AP_START + (blockDig.quality === 3 ? MATCH_AP_REFUND : 0),
+    )
     return {
       state: next,
       events: [
         ...events,
-        ...awardPoint(next, next.playerSide, 'block'),
+        {
+          type: 'DIG',
+          defenderId: blockDig.digger.id,
+          from: blockDigFrom,
+          to: { ...blockSetter.cell },
+          quality: blockDig.quality,
+        },
+        ...autoSet(next, next.playerSide, blockDig.digger.id, rng),
       ],
     }
   }

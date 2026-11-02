@@ -2,6 +2,7 @@ import { ATTACK_LABEL } from '../../engine'
 import type { AttackKind, Quality } from '../../engine'
 import type { CommentaryLine, Expression } from '../types'
 import type { CourtTeam, Side } from '../../court/types'
+import type { BlockOutcome } from '../../court/match'
 
 export const RELATOR_NAME = 'NANDO'
 
@@ -266,6 +267,40 @@ export const blockLine = (name: string, seed: number): CommentaryLine =>
     'triumphant',
   )
 
+export const blockContactLine = (
+  name: string,
+  outcome: BlockOutcome,
+  seed: number,
+): CommentaryLine => {
+  if (outcome === 'touch') {
+    return line(
+      pick(
+        [
+          `¡La pelota toca el bloqueo de ${name}! Queda viva.`,
+          `¡Desvío de ${name}! La defensa tiene que salvarla.`,
+          `¡Toque del muro de ${name}! El rally sigue.`,
+        ],
+        seed,
+      ),
+      'excited',
+    )
+  }
+  if (outcome === 'out') {
+    return line(
+      pick(
+        [
+          `¡La pelota toca las manos de ${name} y se va afuera!`,
+          `¡Bloqueo desviado! La pelota sale de la cancha.`,
+          `¡Se le escapa a ${name}! La pelota termina afuera.`,
+        ],
+        seed,
+      ),
+      'excited',
+    )
+  }
+  return blockLine(name, seed)
+}
+
 export const digLine = (
   name: string,
   quality: Quality,
@@ -287,12 +322,24 @@ export const pointLine = (
   side: Side,
   teams: Record<Side, CourtTeam>,
   score: Record<Side, number>,
-  reason: 'ace' | 'error' | 'attack' | 'block' | 'cap',
+  reason: 'ace' | 'error' | 'attack' | 'block' | 'blockOut' | 'blockDown' | 'cap',
   seed: number,
 ): CommentaryLine => {
   const team = teams[side].short
   if (reason === 'block') {
     return line(`¡BLOQUEO! Punto de ${team}. ${scoreText(score)}`, 'triumphant')
+  }
+  if (reason === 'blockOut') {
+    return line(
+      `La pelota toca el bloqueo y se va afuera. Punto de ${team}. ${scoreText(score)}`,
+      'excited',
+    )
+  }
+  if (reason === 'blockDown') {
+    return line(
+      `La pelota quedó del lado del bloqueo. Punto de ${team}. ${scoreText(score)}`,
+      'excited',
+    )
   }
   if (reason === 'ace') {
     return line(`¡ACE! Punto de ${team}. ${scoreText(score)}`, 'triumphant')
@@ -309,6 +356,26 @@ export const pointLine = (
         `¡Punto de ${team}! ${scoreText(score)}`,
         `¡La pelota al piso! Punto de ${team}. ${scoreText(score)}`,
         `¡Se lo lleva ${team}! ${scoreText(score)}`,
+      ],
+      seed,
+    ),
+    'triumphant',
+  )
+}
+
+export const pointCelebrationLine = (
+  side: Side,
+  teams: Record<Side, CourtTeam>,
+  score: Record<Side, number>,
+  seed: number,
+): CommentaryLine => {
+  const team = teams[side].short
+  return line(
+    pick(
+      [
+        `¡${team} lo festeja! ${scoreText(score)}`,
+        `¡Punto de ${team}! El estadio explota. ${scoreText(score)}`,
+        `¡${team} celebra! ${scoreText(score)}`,
       ],
       seed,
     ),

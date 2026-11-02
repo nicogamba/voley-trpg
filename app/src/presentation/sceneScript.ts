@@ -7,11 +7,12 @@ import {
   attackLabel,
   attackLine,
   ballInAirLine,
-  blockLine,
+  blockContactLine,
   digLine,
   endLine,
   freeBallLine,
   matchPointLine,
+  pointCelebrationLine,
   pointLine,
   receiveLine,
   serveLine,
@@ -225,22 +226,30 @@ export const sceneScript = (
           ),
         })
         if (event.resolution.outcome === 'blocked') {
-          const blockerId =
-            event.resolution.blockerIds[0] ??
-            event.resolution.defenderId
+          const blockerId = event.resolution.defenderId
           const blocker = playerById(pre, blockerId)
+          const block = event.resolution.block ?? 'stuff'
           push({
             id: `block-${index}`,
             frame: {
               mode: 'duel',
               actorId: blockerId,
-              banner: '¡BLOQUEO!',
+              banner:
+                block === 'touch'
+                  ? '¡TOQUE!'
+                  : block === 'out'
+                    ? '¡AFUERA!'
+                    : '¡BLOQUEO!',
               pose: 'block',
               effect: 'impact',
               tone: otherSide(side),
               shot: 'duel',
             },
-            line: blockLine(blocker?.name ?? 'El bloqueo', seed),
+            line: blockContactLine(
+              blocker?.name ?? 'El bloqueo',
+              block,
+              seed,
+            ),
           })
         }
         lastAttackerId = event.attackerId
@@ -286,11 +295,15 @@ export const sceneScript = (
         if (reason === 'block') {
           actorId = lastDefenderId
           pose = 'block'
+        } else if (
+          reason === 'attack' ||
+          reason === 'blockOut' ||
+          reason === 'blockDown'
+        ) {
+          actorId = lastAttackerId
+          pose = 'celebrate'
         } else if (reason === 'ace') {
           actorId = lastServerId
-          pose = 'celebrate'
-        } else if (reason === 'attack') {
-          actorId = lastAttackerId
           pose = 'celebrate'
         } else {
           actorId = celebrationPlayer(pre, side)?.id
@@ -300,13 +313,17 @@ export const sceneScript = (
         const stamp =
           reason === 'block'
             ? '¡BLOQUEO!'
-            : reason === 'ace'
-              ? '¡ACE!'
-              : reason === 'error'
-                ? '¡ERROR!'
-                : reason === 'cap'
-                  ? '¡RALLY LARGO!'
-                  : '¡PUNTO!'
+            : reason === 'blockOut'
+              ? '¡AFUERA!'
+              : reason === 'blockDown'
+                ? '¡PUNTO!'
+                : reason === 'ace'
+                  ? '¡ACE!'
+                  : reason === 'error'
+                    ? '¡ERROR!'
+                    : reason === 'cap'
+                      ? '¡RALLY LARGO!'
+                      : '¡PUNTO!'
 
         const lead = score[side] - score[otherSide(side)]
         const isMatchPoint =
@@ -327,19 +344,35 @@ export const sceneScript = (
             effect: 'flash',
             tone: side,
             shot:
-              reason === 'block'
-                ? 'block'
-                : reason === 'attack' ||
-                    reason === 'cap' ||
-                    reason === 'ace'
-                  ? 'point'
-                  : (lastErrorShot ?? 'error'),
+              reason === 'block' || reason === 'blockDown'
+                ? 'point'
+                : reason === 'blockOut'
+                  ? 'error'
+                  : reason === 'attack' ||
+                      reason === 'cap' ||
+                      reason === 'ace'
+                    ? 'point'
+                    : (lastErrorShot ?? 'error'),
           },
           line: {
             ...base,
             text,
             expression: isMatchPoint ? 'shocked' : base.expression,
           },
+          score: { ...score },
+        })
+        push({
+          id: `point-celebration-${index}`,
+          frame: {
+            mode: 'result',
+            banner: teams[side].short,
+            stamp: '¡PUNTO!',
+            effect: 'flash',
+            tone: side,
+            shot: 'pointCelebration',
+            mirror: side === 'away',
+          },
+          line: pointCelebrationLine(side, teams, score, seed),
           score: { ...score },
         })
         break

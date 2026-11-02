@@ -156,6 +156,8 @@ export type DuelResolution = {
   zone: number
   outcome: 'point' | 'dig' | 'blocked' | 'fault'
   fault?: 'net' | 'out'
+  /** Resultado del contacto con el bloqueo cuando outcome es 'blocked'. */
+  block?: BlockOutcome
   digQuality: Quality | null
   defenderId: string
   blockerIds: string[]
@@ -163,6 +165,18 @@ export type DuelResolution = {
   attackTechnique?: TechniqueId
   defenseTechnique?: TechniqueId
 }
+
+/** Qué pasa después de que el ataque toca el bloqueo. */
+export type BlockOutcome = 'stuff' | 'touch' | 'out'
+
+export type PointReason =
+  | 'ace'
+  | 'error'
+  | 'attack'
+  | 'block'
+  | 'blockOut'
+  | 'blockDown'
+  | 'cap'
 
 export type AttackRecord = { side: Side; kind: AttackKind }
 export type DefenseRecord = { side: Side; scheme: DefenseScheme }
@@ -277,7 +291,7 @@ export type MatchEvent =
   | {
       type: 'POINT'
       side: Side
-      reason: 'ace' | 'error' | 'attack' | 'block' | 'cap'
+      reason: PointReason
       score: Record<Side, number>
     }
   | {
@@ -787,6 +801,55 @@ export const resolveDuel = (params: {
     attackTechnique,
     defenseTechnique,
   }
+}
+
+/**
+ * Después de un bloqueo, decide si la pelota muere en el campo atacante
+ * (stuff), si toca el bloqueo y se va afuera, o si queda viva para que
+ * la defensa la levante.
+ */
+export const resolveBlockOutcome = (
+  resolution: DuelResolution,
+  defender: CourtPlayer,
+  kind: AttackKind,
+  rng: () => number,
+): BlockOutcome => {
+  const margin = Math.max(0, -(resolution.A - resolution.D))
+  const blockers = Math.max(1, resolution.blockerIds.length)
+  const statBonus = Math.max(
+    -0.06,
+    Math.min(
+      0.06,
+      (defender.stats.lectura + defender.stats.velocidad - 8) * 0.02,
+    ),
+  )
+  const out = Math.min(
+    0.45,
+    Math.max(
+      0.08,
+      0.26 +
+        (kind === 'wipe' ? 0.3 : 0) +
+        (kind === 'tip' ? 0.05 : 0) -
+        (blockers - 1) * 0.03 -
+        statBonus * 0.5,
+    ),
+  )
+  const stuff = Math.min(
+    0.65,
+    Math.max(
+      0.15,
+      0.2 +
+        Math.min(0.1, Math.max(0, margin - 2) * 0.02) +
+        (blockers - 1) * 0.04 -
+        (kind === 'wipe' ? 0.1 : 0) +
+        statBonus * 0.5,
+    ),
+  )
+  const cappedStuff = Math.min(stuff, Math.max(0.05, 0.95 - out))
+  const roll = rng()
+  if (roll < out) return 'out'
+  if (roll < out + cappedStuff) return 'stuff'
+  return 'touch'
 }
 
 export const attackCandidates = (
