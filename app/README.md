@@ -15,7 +15,7 @@ leer la jugada rival y comprometerse antes de ver el resultado.
 - **S1 “Shell CT1” (demo)**: pantalla partida, comando → cuadro de acción →
   relato → resultado. Set a 25 desde 17-19, motor **6v6** con rotación
   side-out y líbero en zaga.
-- 148 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
+- 149 tests en verde, `tsc -b`, `oxlint` y build de producción sin errores.
 - Balance simulado con 500 partidos IA vs IA (ver más abajo).
 - Pendiente: playtest con 5 personas y deploy en Vercel.
 
@@ -169,7 +169,7 @@ npm run dev
 El servidor queda en `http://127.0.0.1:5173/` (o el siguiente puerto libre).
 
 ```bash
-npm test        # 148 tests: motor, comandos, store, simulación, escenas y render
+npm test        # 149 tests: motor, comandos, store, simulación, escenas y render
 npm run build   # tsc -b && vite build
 npm run lint    # oxlint
 npm run preview # sirve dist/

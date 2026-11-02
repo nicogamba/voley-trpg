@@ -385,6 +385,51 @@ describe('guion de escenas CT1', () => {
     ).toBe(false)
   })
 
+  it('espeja el ataque según el lado que ataca', () => {
+    const pre = create()
+    const attackEvent = (
+      attackerId: string,
+      target: ReturnType<typeof cell>,
+    ): MatchEvent[] => [
+      {
+        type: 'ATTACK',
+        attackerId,
+        kind: 'power',
+        target,
+        resolution: {
+          A: 6,
+          D: 4,
+          edge: 2,
+          zone: 2,
+          outcome: 'dig',
+          digQuality: 2,
+          defenderId:
+            attackerId === 'home-opposite'
+              ? 'away-libero'
+              : 'home-libero',
+          blockerIds: [],
+          scheme: 'spread',
+        },
+      },
+    ]
+    const home = sceneScript(
+      pre,
+      attackEvent('home-opposite', cell('away', 2, 0)),
+      pre,
+      DEMO_TEAMS,
+    )[0]
+    const away = sceneScript(
+      pre,
+      attackEvent('away-opposite', cell('home', 2, 0)),
+      pre,
+      DEMO_TEAMS,
+    )[0]
+    expect(home.frame.shot).toBe('justInAttack')
+    expect(home.frame.mirror).toBe(false)
+    expect(away.frame.shot).toBe('justInAttack')
+    expect(away.frame.mirror).toBe(true)
+  })
+
   it('produce escenas con id y relato para un evento real del motor', () => {
     const pre: MatchState = create()
     const result = serve(pre, cell('away', 0, 0), mulberry32(3))

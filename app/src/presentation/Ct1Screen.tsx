@@ -315,9 +315,10 @@ export const Ct1Screen = ({
           : decision === 'defend'
             ? {
                 mode: 'closeup',
-                shot: 'block',
+                shot: 'justInAttack',
                 banner: 'TU DEFENSA',
                 tone: 'home',
+                mirror: match.possession === 'away',
               }
             : { mode: 'field' }
 

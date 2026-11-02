@@ -236,6 +236,10 @@
   transform: scaleX(-1);
 }
 
+.ct1-frame[data-shot='justInAttack'] .ct1-frame-image {
+  object-position: center top;
+}
+
 .ct1-frame.is-shot {
   background: #05070d;
 }

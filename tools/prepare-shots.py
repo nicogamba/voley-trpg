@@ -12,7 +12,7 @@ Entrada:
   art-source/principal/ready-to-serve.png
   art-source/principal/tu-ataque-por2.png
   art-source/principal/tu-ataque-por4.png
-  art-source/principal/just-in-attack.png
+  art-source/principal/just-in-attack2.png
   art-source/principal/setter-miss.png
   art-source/principal/ball-in-air.png
 
@@ -60,7 +60,7 @@ SHOTS = {
     "ready-to-serve": ("ready-to-serve.png", 0.45),
     "attack-2": ("tu-ataque-por2.png", 0.95),
     "attack-4": ("tu-ataque-por4.png", 0.37),
-    "just-in-attack": ("just-in-attack.png", 0.5),
+    "just-in-attack": ("just-in-attack2.png", 0.5),
     "setter-miss": ("setter-miss.png", 0.55),
     "ball-in-air": ("ball-in-air.png", 0.5),
 }

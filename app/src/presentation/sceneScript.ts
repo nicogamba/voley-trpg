@@ -216,6 +216,7 @@ export const sceneScript = (
             effect: 'speed',
             tone: side,
             shot: 'justInAttack',
+            mirror: side === 'away',
           },
           line: attackLine(
             attacker?.name ?? defender?.name ?? 'El atacante',
